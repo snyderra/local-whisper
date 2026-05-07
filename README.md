@@ -4,27 +4,43 @@
 [![Platform: macOS | iOS | Android](https://img.shields.io/badge/platform-macOS%20%7C%20iOS%20%7C%20Android-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)]()
+[![Offline-first](https://img.shields.io/badge/offline--first-no%20cloud-green.svg)]()
 
-Local Whisper is a local-first voice app for macOS, iOS, and Android.
+Local Whisper is an offline-first voice app for macOS, iOS, and Android.
 
 On macOS, it gives you fast push-to-talk dictation, grammar cleanup, text replacements, selected-text shortcuts, and offline text-to-speech from the menu bar.
 
 On mobile, it brings private recording, local history, modes, model management, and keyboard setup to iOS and Android.
 
-Double-tap to record, tap to stop, and the text lands on your clipboard. Parakeet-TDT v3 is the default speech-to-text engine.
+After setup and model downloads, audio and transcript text stay on your device or localhost services. No cloud speech APIs, hosted transcription, account, or telemetry.
+
+Double-tap to record, tap to stop, and the text lands on your clipboard. Parakeet-TDT v3 is the default offline speech-to-text engine.
 
 <p align="center">
   <img src="assets/hero.png" width="860" alt="Local Whisper macOS settings with Parakeet-TDT v3 active">
 </p>
 
+## Offline By Design
+
+Local Whisper can use the network to install dependencies, download models, and update the checkout. The day-to-day voice workflow is offline after those files are on disk.
+
+| Step | Where it runs |
+|------|---------------|
+| Recording and audio cleanup | On device |
+| Parakeet-TDT v3 and Qwen3-ASR transcription | In-process MLX |
+| WhisperKit transcription | Localhost |
+| Grammar cleanup | On-device Apple Intelligence or localhost LLM |
+| Text-to-speech | In-process Kokoro MLX |
+| History and backups | `~/.whisper/` |
+
 ## At a Glance
 
-Use it when you want voice input that works outside one text box: record from the menu bar, clean the transcript, paste into any app, replay history, and carry the same private workflow into iOS and Android.
+Use it when you want offline voice input that works outside one text box: record from the menu bar, clean the transcript, paste into any app, replay history, and carry the same private workflow into iOS and Android.
 
 | Surface | What it solves | Current state |
 |---------|----------------|---------------|
-| macOS menu bar app | Fast push-to-talk dictation in any app, grammar cleanup, replacements, selected-text shortcuts, offline TTS, clipboard and auto-paste flow. | Ready. Parakeet-TDT v3 is the default engine. |
-| Flutter iOS app | Private recording, local history, modes, model management, setup replay, and keyboard extension setup. | Native transcription wired through `AVAudioEngine` plus WhisperKit/Core ML. |
+| macOS menu bar app | Fast offline push-to-talk dictation in any app, grammar cleanup, replacements, selected-text shortcuts, offline TTS, clipboard and auto-paste flow. | Ready. Parakeet-TDT v3 is the default engine. |
+| Flutter iOS app | Private recording, local history, modes, model management, setup replay, and keyboard extension setup. | Native offline transcription wired through `AVAudioEngine` plus WhisperKit/Core ML. |
 | Flutter Android app | Native recording bridge, input method, setup flow, keyboard verification, history, modes, model management, icons, and manifest identity. | Native shell ready. Production ASR adapter still pending. |
 
 <p align="center">
@@ -56,7 +72,7 @@ One command. The setup script installs dependencies, downloads core local models
 
 ## What It Does
 
-- **On-device transcription** via MLX. Parakeet-TDT v3 is the default; Qwen3-ASR and WhisperKit are alternatives.
+- **Offline transcription** via MLX. Parakeet-TDT v3 is the default; Qwen3-ASR and WhisperKit are alternatives.
 - **Grammar correction** with pluggable backends: Apple Intelligence, Ollama, LM Studio. Or disabled.
 - **Text-to-speech** reads any selected text aloud. Works in any app, multiple voices, streaming playback, offline via Kokoro MLX.
 - **Text replacements** for spoken-to-corrected mappings.
