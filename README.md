@@ -6,15 +6,17 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)]()
 [![Offline-first](https://img.shields.io/badge/offline--first-no%20cloud-green.svg)]()
 
-Local Whisper is an offline-first voice app for macOS, iOS, and Android.
+Local Whisper is offline voice dictation for macOS, iOS, and Android.
 
-On macOS, it gives you fast push-to-talk dictation, grammar cleanup, text replacements, selected-text shortcuts, and offline text-to-speech from the menu bar.
+Voice in, cleaned text out, no cloud in the loop. After models are installed, recording, transcription, cleanup, text replacements, text-to-speech, history, and backups run on-device or localhost.
 
-On mobile, it brings private recording, local history, modes, model management, and keyboard setup to iOS and Android.
+No hosted speech API. No account. No telemetry. No transcript upload.
 
-After setup and model downloads, audio and transcript text stay on your device or localhost services. No cloud speech APIs, hosted transcription, account, or telemetry.
+On macOS, the menu bar app handles push-to-talk dictation in any app, grammar cleanup, selected-text shortcuts, offline TTS, and clipboard or auto-paste output.
 
-Double-tap to record, tap to stop, and the text lands on your clipboard. Parakeet-TDT v3 is the default offline speech-to-text engine.
+On mobile, the Flutter app covers private recording, local history, modes, model management, and keyboard setup for iOS and Android.
+
+macOS flow: double-tap Right Option to record, tap again to stop, and the text lands on your clipboard. Parakeet-TDT v3 is the default offline speech-to-text engine.
 
 <p align="center">
   <img src="assets/hero.png" width="860" alt="Local Whisper macOS settings with Parakeet-TDT v3 active">
@@ -22,26 +24,26 @@ Double-tap to record, tap to stop, and the text lands on your clipboard. Parakee
 
 ## Offline By Design
 
-Local Whisper can use the network to install dependencies, download models, and update the checkout. The day-to-day voice workflow is offline after those files are on disk.
+Local Whisper uses the network for setup, model downloads, and updates. Runtime audio and transcript processing stays local once those files are on disk.
 
-| Step | Where it runs |
-|------|---------------|
+| Runtime path | Where it runs |
+|--------------|---------------|
 | Recording and audio cleanup | On device |
 | Parakeet-TDT v3 and Qwen3-ASR transcription | In-process MLX |
 | WhisperKit transcription | Localhost |
-| Grammar cleanup | On-device Apple Intelligence or localhost LLM |
+| Grammar cleanup | On-device Apple Intelligence, Ollama, or LM Studio |
 | Text-to-speech | In-process Kokoro MLX |
 | History and backups | `~/.whisper/` |
 
 ## At a Glance
 
-Use it when you want offline voice input that works outside one text box: record from the menu bar, clean the transcript, paste into any app, replay history, and carry the same private workflow into iOS and Android.
+Local Whisper is for system-wide dictation, not a single web text box. Record from the menu bar, clean the transcript, paste into any app, replay history, and carry the same local workflow into iOS and Android.
 
-| Surface | What it solves | Current state |
-|---------|----------------|---------------|
-| macOS menu bar app | Fast offline push-to-talk dictation in any app, grammar cleanup, replacements, selected-text shortcuts, offline TTS, clipboard and auto-paste flow. | Ready. Parakeet-TDT v3 is the default engine. |
+| Surface | Runtime scope | Status |
+|---------|---------------|--------|
+| macOS menu bar app | Offline push-to-talk dictation in any app, grammar cleanup, replacements, selected-text shortcuts, offline TTS, clipboard and auto-paste flow. | Ready. Parakeet-TDT v3 is the default engine. |
 | Flutter iOS app | Private recording, local history, modes, model management, setup replay, and keyboard extension setup. | Native offline transcription wired through `AVAudioEngine` plus WhisperKit/Core ML. |
-| Flutter Android app | Native recording bridge, input method, setup flow, keyboard verification, history, modes, model management, icons, and manifest identity. | Native shell ready. Production ASR adapter still pending. |
+| Flutter Android app | Native recording bridge, input method, setup flow, keyboard verification, history, modes, model management, icons, and manifest identity. | Native shell ready. Android-native offline ASR adapter still pending. |
 
 <p align="center">
   <img src="assets/ios-important-screens.png" width="760" alt="Local Whisper iOS record, history, and modes screens">
@@ -57,7 +59,7 @@ cd local-whisper
 ./setup.sh
 ```
 
-One command. The setup script installs dependencies, downloads core local models, builds the Swift UI, configures auto-start, and creates the `wh` alias.
+The setup script installs dependencies, downloads core local models, builds the Swift UI, configures auto-start, and creates the `wh` alias.
 
 | Action | Key |
 |--------|-----|
@@ -73,7 +75,7 @@ One command. The setup script installs dependencies, downloads core local models
 ## What It Does
 
 - **Offline transcription** via MLX. Parakeet-TDT v3 is the default; Qwen3-ASR and WhisperKit are alternatives.
-- **Grammar correction** with pluggable backends: Apple Intelligence, Ollama, LM Studio. Or disabled.
+- **Local grammar correction** via Apple Intelligence, Ollama, or LM Studio; optional.
 - **Text-to-speech** reads any selected text aloud. Works in any app, multiple voices, streaming playback, offline via Kokoro MLX.
 - **Text replacements** for spoken-to-corrected mappings.
 - **Audio processing**: VAD, silence trimming, noise reduction, normalization.
@@ -81,6 +83,7 @@ One command. The setup script installs dependencies, downloads core local models
 - **CLI**: `wh whisper`, `wh listen`, `wh transcribe` for scripting and automation.
 - **Native macOS UI**: menu bar, floating overlay, and settings window.
 - **Mobile apps**: Flutter iOS and Android surfaces for private recording, history, modes, model management, and keyboard setup.
+- **No cloud fallback**: no hosted speech API, no account, no telemetry, no transcript upload.
 - **Auto-backup** of every recording and transcription.
 
 ### Keyboard Shortcuts
@@ -358,7 +361,7 @@ See [docs/configuration.md](docs/configuration.md) for the full TOML reference.
 
 ## Privacy
 
-Audio recording, transcription, grammar correction, replacements, and text-to-speech run on-device or against localhost services. Setup, model downloads, `wh update`, and `wh doctor --fix` can use the network to install packages, fetch models, or update the checkout.
+Audio recording, transcription, grammar correction, replacements, and text-to-speech run on-device or against localhost services. Setup, model downloads, `wh update`, and `wh doctor --fix` use the network to install packages, fetch models, or update the checkout.
 
 | Component | Runs at |
 |-----------|---------|
