@@ -1,7 +1,7 @@
 # Local Whisper
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+[![Platform: macOS | iOS | Android](https://img.shields.io/badge/platform-macOS%20%7C%20iOS%20%7C%20Android-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)]()
 
@@ -15,6 +15,20 @@ Double-tap to record, tap to stop, and the text lands on your clipboard. Parakee
 
 <p align="center">
   <img src="assets/hero.png" width="860" alt="Local Whisper macOS settings with Parakeet-TDT v3 active">
+</p>
+
+## At a Glance
+
+Use it when you want voice input that works outside one text box: record from the menu bar, clean the transcript, paste into any app, replay history, and carry the same private workflow into iOS and Android.
+
+| Surface | What it solves | Current state |
+|---------|----------------|---------------|
+| macOS menu bar app | Fast push-to-talk dictation in any app, grammar cleanup, replacements, selected-text shortcuts, offline TTS, clipboard and auto-paste flow. | Ready. Parakeet-TDT v3 is the default engine. |
+| Flutter iOS app | Private recording, local history, modes, model management, setup replay, and keyboard extension setup. | Native transcription wired through `AVAudioEngine` plus WhisperKit/Core ML. |
+| Flutter Android app | Native recording bridge, input method, setup flow, keyboard verification, history, modes, model management, icons, and manifest identity. | Native shell ready. Production ASR adapter still pending. |
+
+<p align="center">
+  <img src="assets/ios-important-screens.png" width="760" alt="Local Whisper iOS record, history, and modes screens">
 </p>
 
 ## Quick Start (macOS)
