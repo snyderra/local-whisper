@@ -69,3 +69,13 @@ def test_configuration_reference_matches_generated_default_config():
     assert documented_config.keys() == default_config.keys()
     for section in default_config:
         assert documented_config[section].keys() == default_config[section].keys(), section
+
+
+def test_github_actions_use_current_node24_ready_actions():
+    """CI should avoid deprecated Node 20 GitHub Actions runtimes."""
+    workflow = _read(".github/workflows/ci.yml")
+    dependabot = _read(".github/dependabot.yml")
+
+    assert "uses: actions/checkout@v6" in workflow
+    assert "uses: actions/setup-python@v6" in workflow
+    assert 'package-ecosystem: "github-actions"' in dependabot
