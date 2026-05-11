@@ -7,8 +7,9 @@ This module provides a unified interface to grammar correction backends.
 The backend is selected based on the [grammar] configuration.
 
 Supported backends:
-- apple_intelligence: Apple's on-device Foundation Models (macOS 15+)
+- apple_intelligence: Apple's on-device Foundation Models (macOS 26+)
 - ollama: Local Ollama server with configurable LLM models
+- lm_studio: OpenAI-compatible local LM Studio server
 
 Usage:
     from whisper_voice.grammar import Grammar

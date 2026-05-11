@@ -87,6 +87,13 @@ enabled = false
 # "gonna" = "going to"
 # "wanna" = "want to"
 
+[dictation]
+enabled = true             # spoken punctuation and command replacement
+
+[dictation.commands]
+# "next bullet" = "\n- "
+# "smiley" = " :)"
+
 [audio]
 sample_rate = 16000
 min_duration = 0
@@ -96,6 +103,9 @@ vad_enabled = true
 noise_reduction = true
 normalize_audio = true
 pre_buffer = 0.0           # seconds before hotkey (0.0 = disabled)
+
+[service]
+idle_unload_minutes = 20   # 0 = never unload idle ML models
 
 [backup]
 directory = "~/.whisper"

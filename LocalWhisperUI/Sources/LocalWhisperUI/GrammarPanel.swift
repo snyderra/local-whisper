@@ -87,7 +87,7 @@ struct AppleIntelligenceSection: View {
         Section {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                Text("Foundation Models run entirely on-device. Requires macOS 15+ with Apple Intelligence enabled.")
+                Text("Foundation Models run entirely on-device. Requires macOS 26+ with Apple Intelligence enabled.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

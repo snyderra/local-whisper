@@ -59,7 +59,7 @@ struct AboutView: View {
                     .textSelection(.enabled)
             }
 
-            Text("100% local voice transcription for macOS.\nNo cloud, no tracking, no internet required.")
+            Text("Local-first voice transcription for macOS.\nNo hosted speech API, no telemetry. Setup downloads models.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

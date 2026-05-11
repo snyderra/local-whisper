@@ -72,6 +72,15 @@ model = "mlx-community/Qwen3-ASR-1.7B-bf16"
 # Transcription timeout in seconds (0 = no limit)
 timeout = 0
 
+# Decoding parameters
+temperature = 0.0
+top_p = 1.0
+top_k = 0
+repetition_context_size = 100
+repetition_penalty = 1.2
+chunk_duration = 1200.0
+max_tokens = 0
+
 [whisper]
 # WhisperKit server URL
 url = "http://localhost:50060/v1/audio/transcriptions"

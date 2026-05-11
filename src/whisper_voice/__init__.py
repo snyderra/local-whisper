@@ -4,7 +4,7 @@
 Local Whisper - Local voice transcription with grammar correction for macOS
 
 Double-tap Right Option -> speak -> tap to stop -> polished text copied to clipboard.
-All processing runs locally. No internet. No cloud. No tracking.
+Built-in speech paths run on-device or localhost after setup. No hosted speech API or telemetry.
 """
 
 from importlib.metadata import PackageNotFoundError, version

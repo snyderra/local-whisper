@@ -147,7 +147,7 @@ def cmd_doctor(args: list):
         if fix and install_method == INSTALL_SOURCE:
             project_root = Path(__file__).resolve().parents[3]
             macos_major = _get_macos_major()
-            extras = "[apple-intelligence]" if macos_major and macos_major >= 15 else ""
+            extras = "[apple-intelligence]" if macos_major and macos_major >= 26 else ""
             install_path = str(project_root) + extras
             _doctor_fixing(f"pip install -e {install_path}")
             result = subprocess.run(
@@ -486,7 +486,7 @@ def cmd_doctor(args: list):
         except Exception:
             _doctor_info("Apple Intelligence SDK installed")
     except ImportError:
-        _doctor_info("Apple Intelligence SDK not installed (optional, macOS 15+)")
+        _doctor_info("Apple Intelligence SDK not installed (optional, macOS 26+)")
 
     # 18. WhisperKit
     if shutil.which("whisperkit-cli"):

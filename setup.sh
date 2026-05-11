@@ -117,10 +117,9 @@ fi
 
 MACOS_VERSION=$(sw_vers -productVersion)
 MACOS_MAJOR=$(echo "$MACOS_VERSION" | cut -d'.' -f1)
-if [[ "$MACOS_MAJOR" -lt 15 ]]; then
-    log_ok "macOS $MACOS_VERSION (Apple Intelligence requires macOS 15+)"
-else
-    log_ok "macOS $MACOS_VERSION"
+log_ok "macOS $MACOS_VERSION"
+if [[ "$MACOS_MAJOR" -lt 26 ]]; then
+    log_info "Apple Intelligence grammar requires macOS 26+; Ollama and LM Studio remain available."
 fi
 
 # ============================================================================
@@ -191,9 +190,9 @@ fi
 source "$VENV_DIR/bin/activate" || fail "Failed to activate virtual environment"
 
 pip install --upgrade pip -q || fail "Failed to upgrade pip"
-# Apple Intelligence Foundation Models SDK supports macOS 15+.
+# Apple Intelligence Foundation Models SDK support is public on macOS 26+.
 # Earlier systems skip the optional extra and fall back to Ollama or LM Studio.
-if [[ "$MACOS_MAJOR" -ge 15 ]]; then
+if [[ "$MACOS_MAJOR" -ge 26 ]]; then
     pip install -e "$SCRIPT_DIR[apple-intelligence]" -q || fail "Failed to install package"
     log_ok "Package installed (with Apple Intelligence)"
 else
