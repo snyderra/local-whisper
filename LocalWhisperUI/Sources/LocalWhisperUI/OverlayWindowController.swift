@@ -9,11 +9,15 @@ final class OverlayWindowController {
     private var panel: NSPanel?
     private let appState: AppState
     private var safetyHideTask: Task<Void, Never>?
+    private var lastVisibilityRepair: CFTimeInterval = 0
 
     init(appState: AppState) {
         self.appState = appState
         appState.onPhaseChange = { [weak self] phase in
             self?.handlePhaseChange(phase)
+        }
+        appState.onStateUpdate = { [weak self] phase in
+            self?.repairLiveOverlay(for: phase)
         }
         observeOverlayConfig()
     }
@@ -139,6 +143,42 @@ final class OverlayWindowController {
         }
     }
 
+    private func repairLiveOverlay(for phase: AppPhase) {
+        guard appState.config.ui.showOverlay else { return }
+        switch phase {
+        case .recording, .processing, .speaking:
+            ensurePanelVisible()
+        case .done, .error:
+            if panel?.isVisible != true {
+                showPanel()
+            }
+        case .idle:
+            break
+        }
+    }
+
+    private func ensurePanelVisible() {
+        guard let panel else {
+            showPanel()
+            return
+        }
+        if !panel.isVisible || panel.alphaValue < 0.05 {
+            showPanel()
+            return
+        }
+
+        // Recording state_update messages arrive every 0.1s. Reasserting the
+        // level/order once a second repairs Spaces/full-screen/display changes
+        // without making the pill flicker on every waveform tick.
+        let now = CACurrentMediaTime()
+        guard now - lastVisibilityRepair >= 1.0 else { return }
+        lastVisibilityRepair = now
+        panel.level = .screenSaver
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.orderFrontRegardless()
+        panel.alphaValue = appState.config.ui.overlayOpacity
+    }
+
     private func armSafetyHide(after seconds: Double) {
         safetyHideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
@@ -172,6 +212,7 @@ final class OverlayWindowController {
             positionPanel(p)
             p.alphaValue = 0
             p.orderFrontRegardless()
+            lastVisibilityRepair = CACurrentMediaTime()
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.18
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)

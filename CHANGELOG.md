@@ -4,6 +4,15 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Made the menu bar update action use the same Homebrew/source-aware path as `wh update`, including model preparation, Swift UI rebuilds when needed, service restart, and a service-ready check before reporting success.
+- Kept the recording overlay visible during live recording updates by repairing the panel when repeated `state_update` snapshots arrive, not only when the phase changes.
+- Enforced one Local Whisper service per macOS user with a global per-user lock that is independent of `HOME`, and cleaned up legacy duplicate `wh _run` processes from older HOME-scoped lock paths.
+- Added clearer top-level service control docs for `wh status`, `wh start`, `wh stop`, `wh restart`, `wh log`, `wh doctor`, and `wh update`.
+
 ## [1.6.5] - 2026-05-16
 
 ### Added

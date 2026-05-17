@@ -74,6 +74,20 @@ def test_recommended_install_path_uses_homebrew_and_guided_setup():
     assert "begin" + "ner" not in combined.lower()
 
 
+def test_service_controls_are_clear_near_setup_docs():
+    """Non-technical users should see service control commands before deep CLI details."""
+    readme = _read("README.md")
+    quickstart = _read("doc/quickstart.mdx")
+    install_doc = _read("doc/reference/installation.mdx")
+
+    for content in [readme, quickstart, install_doc]:
+        assert "wh status    # Check whether Local Whisper is running" in content
+        assert "wh start     # Start it again" in content
+        assert "wh stop      # Stop it" in content
+        assert "wh restart   # Stop and start cleanly" in content
+        assert "Only one service can run at a time" in content
+
+
 def test_legacy_docs_directory_has_moved_to_mintlify_doc():
     """The old docs directory should be represented only in the Mintlify doc source."""
     assert not (ROOT / "docs").exists()

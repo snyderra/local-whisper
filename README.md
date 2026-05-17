@@ -82,6 +82,22 @@ cd local-whisper
 
 The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. Other engines download when you switch to them. Kokoro downloads when text-to-speech is enabled.
 
+### Service Controls
+
+Local Whisper runs as one background service. If you close it, update it, or it stops responding, these are the commands to use:
+
+```bash
+wh status    # Check whether Local Whisper is running
+wh start     # Start it again
+wh stop      # Stop it
+wh restart   # Stop and start cleanly
+wh log       # Open the live service log
+wh doctor    # Check install, permissions, models, and service health
+wh update    # Update Local Whisper, prepare models, rebuild the menu app, and restart
+```
+
+Only one service can run at a time. This is shared across Homebrew and source installs, so starting Local Whisper from another Terminal or another install path will not create a second running service.
+
 Details: [Installation](https://gabrimatic.github.io/local-whisper/reference/installation/).
 
 | Action | Key |

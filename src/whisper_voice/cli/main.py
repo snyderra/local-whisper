@@ -395,7 +395,8 @@ def cli_main():
     elif cmd == "config":
         cmd_config(rest)
     elif cmd == "update":
-        cmd_update()
+        if not cmd_update():
+            sys.exit(1)
     elif cmd == "doctor":
         cmd_doctor(rest)
     elif cmd == "export":

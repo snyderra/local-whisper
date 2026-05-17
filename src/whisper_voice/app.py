@@ -27,6 +27,7 @@ from .audio import Recorder
 from .audio_processor import AudioProcessor
 from .backends import BACKEND_REGISTRY
 from .backup import Backup
+from .cli.constants import LOCK_FILE
 from .cmd_server import CommandServer
 from .config import CONFIG_FILE, get_config
 from .grammar import Grammar
@@ -352,81 +353,24 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
 
     def _update_service(self):
         """Pull latest changes, update dependencies, rebuild Swift targets, and restart."""
-        import shutil
-
-        repo_root = Path(__file__).resolve().parents[2]
         log("Update requested from Swift UI.")
 
+        if self.recorder.recording or self._busy:
+            self._send_state_update("error", status_text="Finish current recording before updating")
+            return
+
+        def report(phase: str, status_text: str):
+            self._send_state_update(phase, status_text=status_text)
+
         try:
-            # Step 1: git pull
-            self._send_state_update("processing", status_text="Updating: pulling latest code...")
-            git = shutil.which("git")
-            if git:
-                result = subprocess.run(
-                    [git, "pull"],
-                    cwd=str(repo_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-                if result.returncode != 0:
-                    log(f"git pull failed: {result.stderr.strip()}", "ERR")
-                    self._send_state_update("error", status_text="Update failed: git pull error")
-                    return
-            else:
-                log("git not found - skipping pull")
-
-            # Step 2: update Python dependencies
-            self._send_state_update("processing", status_text="Updating: installing dependencies...")
-            for candidate in [
-                repo_root / ".venv" / "bin" / "python",
-                repo_root / "venv" / "bin" / "python",
-            ]:
-                if candidate.exists():
-                    python = str(candidate)
-                    break
-            else:
-                python = sys.executable
-
-            subprocess.run(
-                [python, "-m", "pip", "install", "-e", str(repo_root),
-                 "--upgrade", "--upgrade-strategy", "eager",
-                 "--quiet"],
-                timeout=120,
+            from .cli.doctor import cmd_update
+            ok = cmd_update(
+                status_callback=report,
+                restart_callback=self._restart_service,
+                wait_after_restart=False,
             )
-
-            # Step 3: rebuild Swift targets
-            swift = shutil.which("swift")
-            if swift:
-                # LocalWhisperUI
-                self._send_state_update("processing", status_text="Updating: rebuilding...")
-                ui_dir = repo_root / "LocalWhisperUI"
-                if ui_dir.exists():
-                    result = subprocess.run(
-                        [swift, "build", "-c", "release"],
-                        cwd=str(ui_dir),
-                        capture_output=True,
-                        timeout=300,
-                    )
-                    if result.returncode == 0:
-                        # Assemble .app bundle
-                        built_binary = ui_dir / ".build" / "release" / "LocalWhisperUI"
-                        if built_binary.exists():
-                            import stat
-                            macos_dir = Path.home() / ".whisper" / "LocalWhisperUI.app" / "Contents" / "MacOS"
-                            macos_dir.mkdir(parents=True, exist_ok=True)
-                            dest = macos_dir / "LocalWhisperUI"
-                            shutil.copy2(str(built_binary), str(dest))
-                            dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-                    else:
-                        log("LocalWhisperUI build failed - continuing", "ERR")
-            else:
-                log("swift not found - skipping Swift rebuild")
-
-            # Step 4: restart via exec
-            self._send_state_update("processing", status_text="Restarting...")
-            self._restart_service()
-
+            if ok:
+                self._send_state_done("", status="Update complete")
         except Exception as e:
             log(f"Update failed: {e}", "ERR")
             self._send_state_update("error", status_text="Update failed")
@@ -566,6 +510,93 @@ def _setup_service_logging():
     sys.stderr = log_fd
 
 
+def _acquire_service_lock(lock_path: str = LOCK_FILE):
+    """Acquire the cross-install service lock, or return None if another service owns it."""
+    path = Path(lock_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(path), os.O_CREAT | os.O_WRONLY, 0o600)
+    lock_file = os.fdopen(lock_fd, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock_file.close()
+        return None
+    return lock_file
+
+
+def _release_service_lock(lock_file):
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+    finally:
+        lock_file.close()
+
+
+def _service_process_pids() -> list[int]:
+    """Return same-user Local Whisper service PIDs, excluding this process."""
+    current_pid = os.getpid()
+    uid = os.getuid()
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,uid=,command="],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return []
+    if result.returncode != 0:
+        return []
+
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) != 3:
+            continue
+        try:
+            pid = int(parts[0])
+            process_uid = int(parts[1])
+        except ValueError:
+            continue
+        command = parts[2]
+        if pid == current_pid or process_uid != uid:
+            continue
+        if " wh _run" in command and "local-whisper" in command:
+            pids.append(pid)
+    return pids
+
+
+def _terminate_duplicate_services():
+    """Stop legacy duplicate services that used a HOME-scoped lock path."""
+    pids = _service_process_pids()
+    if not pids:
+        return
+    log(f"Stopping duplicate Local Whisper services: {', '.join(map(str, pids))}", "WARN")
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            log(f"Permission denied stopping duplicate service pid {pid}", "WARN")
+    deadline = time.time() + 3.0
+    remaining = set(pids)
+    while remaining and time.time() < deadline:
+        for pid in list(remaining):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                remaining.remove(pid)
+        time.sleep(0.1)
+    for pid in remaining:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            log(f"Force-killed duplicate Local Whisper service pid {pid}", "WARN")
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            log(f"Permission denied force-killing duplicate service pid {pid}", "WARN")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -580,16 +611,13 @@ def service_main():
     # get the fix on next restart without needing to re-run setup.sh.
     os.environ.pop("HF_HUB_OFFLINE", None)
 
-    # Single-instance lock
-    lock_path = str(Path.home() / ".whisper" / "service.lock")
-    lock_fd = os.open(lock_path, os.O_CREAT | os.O_WRONLY, 0o600)
-    lock_file = os.fdopen(lock_fd, "w")
-    try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    # Single-instance lock shared by source, pip, and Homebrew installs.
+    lock_file = _acquire_service_lock()
+    if lock_file is None:
         print("Local Whisper is already running.", file=sys.stderr)
         sys.exit(0)
-    atexit.register(lambda: (fcntl.flock(lock_file, fcntl.LOCK_UN), lock_file.close()))
+    atexit.register(_release_service_lock, lock_file)
+    _terminate_duplicate_services()
 
     config = get_config()
 

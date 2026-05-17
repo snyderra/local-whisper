@@ -31,11 +31,24 @@ class CommandsMixin:
             self._cmd_listen(request, send, stop_event)
         elif action == "transcribe":
             self._cmd_transcribe(request, send, stop_event)
+        elif action == "status":
+            self._cmd_status(send)
         elif action == "stop":
             # Stop is handled by the disconnect watcher in cmd_server
             pass
         else:
             send({"type": "error", "message": f"Unknown command: {action}"})
+
+    def _cmd_status(self, send: callable):
+        """Return a lightweight readiness snapshot for update/restart verification."""
+        send({
+            "type": "done",
+            "success": True,
+            "ready": bool(self._ready and self.transcriber.running()),
+            "busy": bool(self._busy),
+            "recording": bool(self.recorder.recording),
+            "engine": self.config.transcription.engine,
+        })
 
     def _cmd_whisper(self, request: dict, send: callable, stop_event: threading.Event):
         """Speak text aloud via TTS."""

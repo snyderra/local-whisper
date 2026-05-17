@@ -48,24 +48,65 @@ def _find_pid() -> Optional[int]:
     """Return the service PID, or None. Matches only `wh _run` so sibling
     CLI invocations (e.g. a concurrent `wh status`) are never mistaken
     for the long-lived service."""
+    pids = _find_pids()
+    return pids[0] if pids else None
+
+
+def _find_pids() -> list[int]:
+    """Return same-user Local Whisper service PIDs, excluding this CLI process."""
     my_pid = os.getpid()
+    uid = os.getuid()
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "wh _run"],
+            ["ps", "-axo", "pid=,uid=,command="],
             capture_output=True, text=True,
         )
     except Exception:
-        return None
+        return []
     if result.returncode != 0:
-        return None
-    for p in result.stdout.strip().split():
+        return []
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) != 3:
+            continue
         try:
-            pid = int(p)
+            pid = int(parts[0])
+            process_uid = int(parts[1])
         except ValueError:
             continue
-        if pid != my_pid:
-            return pid
-    return None
+        command = parts[2]
+        if pid == my_pid or process_uid != uid:
+            continue
+        if " wh _run" in command and "local-whisper" in command:
+            pids.append(pid)
+    return pids
+
+
+def _terminate_pids(pids: list[int]):
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            print(f"{C_RED}Permission denied to kill pid {pid}{C_RESET}", file=sys.stderr)
+    deadline = time.time() + 5.0
+    remaining = set(pids)
+    while remaining and time.time() < deadline:
+        time.sleep(0.1)
+        for pid in list(remaining):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                remaining.remove(pid)
+    for pid in remaining:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            print(f"{C_RED}Permission denied to force-kill pid {pid}{C_RESET}", file=sys.stderr)
 
 
 def _cleanup_lock():
@@ -378,6 +419,13 @@ def cmd_stop():
     """Graceful kill with SIGTERM -> SIGKILL fallback."""
     running, pid = _is_running()
     if not running:
+        legacy_pids = _find_pids()
+        if legacy_pids:
+            print(f"{C_DIM}Stopping legacy service processes ({', '.join(map(str, legacy_pids))})...{C_RESET}")
+            _terminate_pids(legacy_pids)
+            _cleanup_lock()
+            print(f"{C_GREEN}Stopped{C_RESET}")
+            return
         print(f"{C_DIM}Not running{C_RESET}")
         return
 
@@ -389,32 +437,14 @@ def cmd_stop():
         print(f"{C_YELLOW}Running but PID not found - check Activity Monitor{C_RESET}", file=sys.stderr)
         return
 
+    pids = _find_pids()
+    if not pids and pid:
+        pids = [pid]
     try:
-        os.kill(pid, signal.SIGTERM)
-        print(f"{C_DIM}Stopping (pid {pid})...{C_RESET}")
-
-        # Wait up to 5s for graceful exit
-        for _ in range(50):
-            time.sleep(0.1)
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                _cleanup_lock()
-                print(f"{C_GREEN}Stopped{C_RESET}")
-                return
-
-        # Force kill
-        try:
-            os.kill(pid, signal.SIGKILL)
-            _cleanup_lock()
-            print(f"{C_YELLOW}Force-killed{C_RESET}")
-        except ProcessLookupError:
-            _cleanup_lock()
-            print(f"{C_GREEN}Stopped{C_RESET}")
-
-    except ProcessLookupError:
+        print(f"{C_DIM}Stopping ({', '.join(f'pid {p}' for p in pids)})...{C_RESET}")
+        _terminate_pids(pids)
         _cleanup_lock()
         print(f"{C_GREEN}Stopped{C_RESET}")
-    except PermissionError:
-        print(f"{C_RED}Permission denied to kill pid {pid}{C_RESET}", file=sys.stderr)
+    except Exception as exc:
+        print(f"{C_RED}Failed to stop service: {exc}{C_RESET}", file=sys.stderr)
         sys.exit(1)

@@ -28,6 +28,8 @@ final class AppState {
 
     // Called whenever phase changes. Set by OverlayWindowController.
     var onPhaseChange: ((AppPhase) -> Void)?
+    // Called for every state_update snapshot, including repeated recording ticks.
+    var onStateUpdate: ((AppPhase) -> Void)?
 
     private(set) var ipcClient: IPCClient?
 
@@ -77,6 +79,7 @@ final class AppState {
             if phase != oldPhase {
                 onPhaseChange?(phase)
             }
+            onStateUpdate?(phase)
 
         case .historyUpdate(let entries):
             self.history = entries

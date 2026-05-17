@@ -4,11 +4,12 @@
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .constants import (
     C_BOLD,
@@ -18,12 +19,15 @@ from .constants import (
     C_RED,
     C_RESET,
     C_YELLOW,
+    CMD_SOCKET_PATH,
     INSTALL_BREW,
     INSTALL_SOURCE,
     MODEL_DIR,
     get_install_method,
 )
 from .lifecycle import _get_config_path, _is_running
+
+FORMULA_NAME = "gabrimatic/local-whisper/local-whisper"
 
 
 def _doctor_pass(msg: str):
@@ -507,25 +511,59 @@ def cmd_doctor(args: list):
     sys.exit(0 if core_ok else 1)
 
 
-def cmd_update():
+def cmd_update(
+    status_callback: Optional[Callable[[str, str], None]] = None,
+    restart_callback: Optional[Callable[[], None]] = None,
+    wait_after_restart: bool = True,
+) -> bool:
     """Pull latest code, update dependencies, check model, rebuild Swift, and restart."""
     install_method = get_install_method()
 
-    if install_method == INSTALL_BREW:
-        print(f"\n  {C_BOLD}Updating via Homebrew...{C_RESET}")
-        result = subprocess.run(["brew", "upgrade", "local-whisper"])
-        if result.returncode != 0:
-            print(f"{C_YELLOW}  brew upgrade returned non-zero (may already be up to date){C_RESET}")
+    def report(phase: str, text: str):
+        if status_callback is not None:
+            status_callback(phase, text)
+
+    def fail(text: str, stderr: str = "") -> bool:
+        if stderr:
+            print(f"{C_RED}  {text}: {stderr.strip()}{C_RESET}", file=sys.stderr)
         else:
-            print(f"  {C_GREEN}Done{C_RESET}")
+            print(f"{C_RED}  {text}{C_RESET}", file=sys.stderr)
+        report("error", text)
+        return False
 
-        # Still check models (brew upgrade doesn't download them)
-        _update_models()
+    if install_method == INSTALL_BREW:
+        print(f"\n  {C_BOLD}1/4  Refreshing Homebrew...{C_RESET}")
+        report("processing", "Updating: refreshing Homebrew...")
+        brew = shutil.which("brew")
+        if not brew:
+            return fail("Update failed: Homebrew not found")
+        result = subprocess.run([brew, "update"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return fail("Update failed: Homebrew refresh failed", result.stderr or result.stdout)
+        print(f"  {C_GREEN}Done{C_RESET}")
 
-        print(f"\n  {C_BOLD}Restarting service...{C_RESET}")
-        subprocess.run(["brew", "services", "restart", "local-whisper"])
+        print(f"\n  {C_BOLD}2/4  Upgrading Local Whisper...{C_RESET}")
+        report("processing", "Updating: installing app update...")
+        result = subprocess.run([brew, "upgrade", FORMULA_NAME], capture_output=True, text=True)
+        if result.returncode != 0:
+            return fail("Update failed: Homebrew upgrade failed", result.stderr or result.stdout)
+        print(f"  {C_GREEN}Done{C_RESET}")
+
+        print(f"\n  {C_BOLD}3/4  Preparing active model...{C_RESET}")
+        report("processing", "Updating: preparing active model...")
+        if not _update_models(required=True):
+            return fail("Update failed: active model could not be prepared")
+
+        print(f"\n  {C_BOLD}4/4  Restarting service...{C_RESET}")
+        report("processing", "Updating: restarting service...")
+        result = subprocess.run([brew, "services", "restart", "local-whisper"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return fail("Update failed: service restart failed", result.stderr or result.stdout)
+        if wait_after_restart and not _wait_for_service_ready():
+            return fail("Update installed, but the service did not become ready")
         print(f"\n  {C_GREEN}{C_BOLD}Update complete.{C_RESET}")
-        return
+        report("done", "Update complete")
+        return True
 
     project_root = Path(__file__).resolve().parents[3]
     python = _get_venv_python()
@@ -533,6 +571,7 @@ def cmd_update():
     # Step 1: git pull. Capture the pre-pull HEAD so a later step failure can
     # surface a "roll back to <sha>" hint rather than leaving the user guessing.
     print(f"\n  {C_BOLD}1/5  Pulling latest code...{C_RESET}")
+    report("processing", "Updating: pulling latest code...")
     git = shutil.which("git")
     pre_pull_sha = None
     pulled = False
@@ -544,20 +583,34 @@ def cmd_update():
             ).strip()
         except Exception:
             pre_pull_sha = None
-        result = subprocess.run(
-            [git, "-C", str(project_root), "pull"],
+        fetch_result = subprocess.run(
+            [git, "-C", str(project_root), "fetch", "--prune", "origin"],
         )
+        if fetch_result.returncode != 0:
+            return fail("Update failed: git fetch failed")
+        branch_result = subprocess.run(
+            [git, "-C", str(project_root), "symbolic-ref", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ""
+        pull_cmd = [git, "-C", str(project_root), "pull", "--ff-only"]
+        if branch == "main":
+            pull_cmd.extend(["origin", "main"])
+        result = subprocess.run(pull_cmd)
         if result.returncode != 0:
             print(f"{C_RED}  git pull failed. Aborting update so the service stays on known-good code.{C_RESET}", file=sys.stderr)
             print(f"  {C_DIM}Resolve the issue (conflicts, auth, or network) and rerun: wh update{C_RESET}", file=sys.stderr)
-            sys.exit(1)
+            report("error", "Update failed: git pull error")
+            return False
         pulled = True
         print(f"  {C_GREEN}Done{C_RESET}")
     else:
-        print(f"  {C_YELLOW}git not found, skipping source refresh{C_RESET}")
+        return fail("Update failed: git not found")
 
     # Step 2: pip install -e . --upgrade
     print(f"\n  {C_BOLD}2/5  Updating Python dependencies...{C_RESET}")
+    report("processing", "Updating: installing dependencies...")
     result = subprocess.run(
         [python, "-m", "pip", "install", "-e", str(project_root), "--upgrade", "--upgrade-strategy", "eager"],
     )
@@ -572,36 +625,49 @@ def cmd_update():
                 f"{C_DIM}    git -C {project_root} reset --hard {pre_pull_sha}{C_RESET}",
                 file=sys.stderr,
             )
-        sys.exit(1)
+        report("error", "Update failed: dependency install error")
+        return False
     print(f"  {C_GREEN}Done{C_RESET}")
 
     # Step 3: check for model updates
     print(f"\n  {C_BOLD}3/5  Checking models...{C_RESET}")
-    _update_models()
+    report("processing", "Updating: preparing active model...")
+    if not _update_models(required=True):
+        return fail("Update failed: active model could not be prepared")
 
     # Step 4: rebuild LocalWhisperUI if sources newer than binary
     print(f"\n  {C_BOLD}4/5  Rebuilding LocalWhisperUI if needed...{C_RESET}")
+    report("processing", "Updating: rebuilding menu app...")
     from .build import _build_local_whisper_ui, _local_whisper_ui_sources_newer_than_binary
     swift = shutil.which("swift")
     needs_ui_rebuild = _local_whisper_ui_sources_newer_than_binary()
 
     if not swift and needs_ui_rebuild:
-        print(f"  {C_YELLOW}swift not found - skipping LocalWhisperUI rebuild{C_RESET}")
+        return fail("Update failed: swift not found for LocalWhisperUI rebuild")
     else:
         if needs_ui_rebuild and swift:
             if not _build_local_whisper_ui(swift):
-                print(f"  {C_RED}LocalWhisperUI build failed{C_RESET}", file=sys.stderr)
+                return fail("Update failed: LocalWhisperUI build failed")
         elif not needs_ui_rebuild:
             print(f"  {C_DIM}LocalWhisperUI up to date{C_RESET}")
 
     # Step 5: restart the service
     print(f"\n  {C_BOLD}5/5  Restarting service...{C_RESET}")
-    from .build import cmd_restart
-    cmd_restart()
+    report("processing", "Updating: restarting service...")
+    if restart_callback is not None:
+        restart_callback()
+        return True
+    else:
+        from .build import cmd_restart
+        cmd_restart()
+    if wait_after_restart and not _wait_for_service_ready():
+        return fail("Update installed, but the service did not become ready")
     print(f"\n  {C_GREEN}{C_BOLD}Update complete.{C_RESET}")
+    report("done", "Update complete")
+    return True
 
 
-def _update_models():
+def _update_models(required: bool = False) -> bool:
     """Check and download updates for the active engine's model + Kokoro TTS."""
     python = _get_venv_python()
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -636,6 +702,8 @@ def _update_models():
         result = subprocess.run([python, "-c", cmd], env=model_env)
         if result.returncode != 0:
             print(f"{C_YELLOW}  {label} model check failed - skipping{C_RESET}")
+            if required:
+                return False
     else:
         print(f"{C_DIM}  Active engine '{active_engine}' manages its own model.{C_RESET}")
 
@@ -657,5 +725,39 @@ def _update_models():
         )
         if result.returncode != 0:
             print(f"{C_YELLOW}  Kokoro TTS model check failed - skipping{C_RESET}")
+            if required:
+                return False
     else:
         print(f"{C_DIM}  Kokoro TTS skipped (TTS disabled).{C_RESET}")
+    return True
+
+
+def _wait_for_service_ready(timeout: float = 180.0) -> bool:
+    """Wait until the restarted service reports that the active model is ready."""
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while time.monotonic() < deadline:
+        running, _ = _is_running()
+        if not running:
+            time.sleep(0.5)
+            continue
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2.0)
+                sock.connect(CMD_SOCKET_PATH)
+                sock.sendall(b'{"action":"status"}\n')
+                buf = b""
+                while b"\n" not in buf:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+                if b"\n" in buf and b'"ready": true' in buf:
+                    print(f"  {C_GREEN}Service ready{C_RESET}")
+                    return True
+        except Exception as exc:
+            last_error = exc
+        time.sleep(0.5)
+    if last_error:
+        print(f"{C_YELLOW}  Service readiness check timed out: {last_error}{C_RESET}", file=sys.stderr)
+    return False

@@ -2,6 +2,8 @@
 # Copyright (c) 2025-2026 Soroush Yousefpour
 """ANSI color codes and shared path constants for the CLI."""
 
+import os
+import tempfile
 from pathlib import Path
 
 from .._install import INSTALL_BREW, INSTALL_PIP, INSTALL_SOURCE, get_install_method
@@ -15,7 +17,7 @@ C_GREEN = "\033[92m"
 C_YELLOW = "\033[93m"
 C_CYAN = "\033[96m"
 
-LOCK_FILE = str(Path.home() / ".whisper" / "service.lock")
+LOCK_FILE = str(Path(tempfile.gettempdir()) / f"local-whisper-{os.getuid()}.service.lock")
 LAUNCHAGENT_LABEL = "com.local-whisper"
 LAUNCHAGENT_PLIST = Path.home() / "Library" / "LaunchAgents" / "com.local-whisper.plist"
 LOG_FILE = Path.home() / ".whisper" / "service.log"

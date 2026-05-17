@@ -89,8 +89,7 @@ The source setup path installs an editable Python package in `.venv`, builds the
 Homebrew installs:
 
 ```bash
-brew upgrade local-whisper
-wh setup
+wh update
 ```
 
 Source installs:
@@ -98,6 +97,24 @@ Source installs:
 ```bash
 wh update
 ```
+
+`wh update` refreshes the install, prepares the active model, rebuilds the menu bar app when needed, and restarts the background service. The menu bar "Check for updates..." action uses the same update path.
+
+## Service controls
+
+Local Whisper runs as one background service:
+
+```bash
+wh status    # Check whether Local Whisper is running
+wh start     # Start it again
+wh stop      # Stop it
+wh restart   # Stop and start cleanly
+wh log       # Open the live service log
+wh doctor    # Check install, permissions, models, and service health
+wh update    # Update Local Whisper, prepare models, rebuild the menu app, and restart
+```
+
+Only one service can run at a time, even if both a Homebrew install and a source checkout exist on the same Mac. Extra starts detect the existing service instead of launching another one.
 
 Run `wh doctor` any time you want a health check.
 

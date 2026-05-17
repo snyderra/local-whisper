@@ -39,6 +39,22 @@ The Homebrew path installs Local Whisper, downloads and warms the default Parake
 
 See [Installation](/reference/installation) for permissions, updates, and uninstall details.
 
+## Service controls
+
+Local Whisper runs as one background service. If you close it, update it, or it stops responding, use:
+
+```bash
+wh status    # Check whether Local Whisper is running
+wh start     # Start it again
+wh stop      # Stop it
+wh restart   # Stop and start cleanly
+wh log       # Open the live service log
+wh doctor    # Check install, permissions, models, and service health
+wh update    # Update Local Whisper, prepare models, rebuild the menu app, and restart
+```
+
+Only one service can run at a time. Homebrew and source installs share the same service lock, so another Terminal or install path cannot start a second running service.
+
 ## Start dictating
 
 | Action | Key |
