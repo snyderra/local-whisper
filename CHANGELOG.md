@@ -4,6 +4,12 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.9] - 2026-05-26
+
+### Fixed
+
+- Fixed hold-to-record output so releasing the trigger key preserves hold mode and pastes the transcription at the active cursor.
+
 ## [1.6.8] - 2026-05-26
 
 ### Added
