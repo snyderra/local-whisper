@@ -41,10 +41,12 @@ class CommandsMixin:
 
     def _cmd_status(self, send: callable):
         """Return a lightweight readiness snapshot for update/restart verification."""
+        model_running = bool(self.transcriber.running())
         send({
             "type": "done",
             "success": True,
-            "ready": bool(self._ready and self.transcriber.running()),
+            "ready": bool(self._ready),
+            "models_loaded": bool(getattr(self, "_models_loaded", model_running) and model_running),
             "busy": bool(self._busy),
             "recording": bool(self.recorder.recording),
             "engine": self.config.transcription.engine,
@@ -52,7 +54,9 @@ class CommandsMixin:
 
     def _cmd_whisper(self, request: dict, send: callable, stop_event: threading.Event):
         """Speak text aloud via TTS."""
-        self._touch_model_activity()
+        if self._touch_model_activity() is False:
+            send({"type": "error", "message": "Model reload failed"})
+            return
         text = request.get("text", "").strip()
         if not text:
             send({"type": "error", "message": "No text provided"})
@@ -87,7 +91,9 @@ class CommandsMixin:
 
     def _cmd_listen(self, request: dict, send: callable, stop_event: threading.Event):
         """Record from microphone, transcribe, and return text."""
-        self._touch_model_activity()
+        if self._touch_model_activity() is False:
+            send({"type": "error", "message": "Model reload failed"})
+            return
         with self._state_lock:
             if self._busy or self.recorder.recording:
                 send({"type": "error", "message": "Service is busy"})
@@ -190,7 +196,9 @@ class CommandsMixin:
 
     def _cmd_transcribe(self, request: dict, send: callable, stop_event: threading.Event):
         """Transcribe an audio file."""
-        self._touch_model_activity()
+        if self._touch_model_activity() is False:
+            send({"type": "error", "message": "Model reload failed"})
+            return
         file_path = request.get("path", "").strip()
         if not file_path:
             send({"type": "error", "message": "No file path provided"})

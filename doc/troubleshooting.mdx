@@ -68,6 +68,10 @@ Fresh setup downloads and warms the active engine. Later runs load cached models
 
 Qwen3-ASR downloads when you switch to it. WhisperKit manages its own model folder. Kokoro downloads only after text-to-speech is enabled.
 
+If idle model unload is enabled, Local Whisper may release the active model from RAM while the background service stays ready. The next transcription reloads the model on demand. `wh setup`, `wh update`, and `wh restart` treat the service as ready once the command socket is accepting commands, even if the model is currently unloaded.
+
+Model preparation in setup/update is bounded. If a local model check takes too long, setup continues and the model retries on first use; required update preparation fails instead of hanging indefinitely.
+
 ## Empty transcription
 
 Check microphone permission, input-device selection, and speech level. If the first recording after sleep, wake, or long idle is empty, try once more. Local Whisper resets stale macOS input streams when it sees all-zero audio or a PortAudio input error.

@@ -17,6 +17,7 @@ NC='\033[0m' # No Color
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MODEL_PREP_TIMEOUT_SECONDS=180
 
 log_step() { echo -e "\n${CYAN}▶${NC} $1"; }
 log_ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
@@ -28,6 +29,34 @@ fail() {
     echo -e "  ${RED}✗${NC} $1"
     echo -e "\n${RED}Setup failed.${NC} Fix the issue above and run this script again.\n"
     exit 1
+}
+
+run_with_timeout() {
+    local seconds="$1"
+    shift
+
+    "$@" &
+    local pid=$!
+
+    (
+        sleep "$seconds"
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+            sleep 5
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    ) &
+    local watchdog=$!
+
+    local status=0
+    wait "$pid" || status=$?
+    kill "$watchdog" 2>/dev/null || true
+    wait "$watchdog" 2>/dev/null || true
+
+    if [[ "$status" -eq 137 || "$status" -eq 143 ]]; then
+        return 124
+    fi
+    return "$status"
 }
 
 write_plist() {
@@ -263,11 +292,13 @@ print(load_config().transcription.engine)
 
 case "$ACTIVE_ENGINE" in
     parakeet_v3)
-        if HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
+        if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" env HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
 from parakeet_mlx import from_pretrained
 from_pretrained('mlx-community/parakeet-tdt-0.6b-v3')
 " 2>/dev/null; then
             log_ok "Parakeet-TDT v3 model"
+        elif [[ "$?" -eq 124 ]]; then
+            log_warn "Parakeet model check timed out (will retry on first use)"
         else
             log_warn "Parakeet download failed (will retry on first use)"
         fi
@@ -277,7 +308,7 @@ from_pretrained('mlx-community/parakeet-tdt-0.6b-v3')
             log_ok "Parakeet already warmed up"
         else
             log_info "Warming up Parakeet (compiling MLX graph, ~30s, one-time)..."
-            if HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
+            if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" env HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
 import numpy as np, tempfile, wave, os
 from parakeet_mlx import from_pretrained
 model = from_pretrained('mlx-community/parakeet-tdt-0.6b-v3')
@@ -295,6 +326,8 @@ finally:
 " 2>/dev/null; then
                 touch "$PARAKEET_WARM_SENTINEL"
                 log_ok "Parakeet warmed up"
+            elif [[ "$?" -eq 124 ]]; then
+                log_warn "Parakeet warm-up timed out (first transcription may be slower)"
             else
                 log_warn "Parakeet warm-up failed (first transcription may be slower)"
             fi
@@ -302,11 +335,13 @@ finally:
         ;;
 
     qwen3_asr)
-        if HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
+        if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" env HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
 from qwen3_asr_mlx import Qwen3ASR
 Qwen3ASR.from_pretrained('mlx-community/Qwen3-ASR-1.7B-bf16')
 " 2>/dev/null; then
             log_ok "Qwen3-ASR model"
+        elif [[ "$?" -eq 124 ]]; then
+            log_warn "Qwen3-ASR model check timed out (will retry on first use)"
         else
             log_warn "Qwen3-ASR download failed (will retry on first use)"
         fi
@@ -316,13 +351,15 @@ Qwen3ASR.from_pretrained('mlx-community/Qwen3-ASR-1.7B-bf16')
             log_ok "Qwen3-ASR already warmed up"
         else
             log_info "Warming up Qwen3-ASR (compiling MLX graph, 60-120s, one-time)..."
-            if HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
+            if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" env HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
 from qwen3_asr_mlx import Qwen3ASR
 model = Qwen3ASR.from_pretrained('mlx-community/Qwen3-ASR-1.7B-bf16')
 model.warm_up()
 " 2>/dev/null; then
                 touch "$QWEN_WARM_SENTINEL"
                 log_ok "Qwen3-ASR warmed up"
+            elif [[ "$?" -eq 124 ]]; then
+                log_warn "Qwen3-ASR warm-up timed out (first transcription may be slower)"
             else
                 log_warn "Warm-up failed (first transcription may be slower)"
             fi
@@ -363,15 +400,22 @@ if [ "$TTS_ENABLED" = "true" ]; then
     # Skip the spaCy download when the model is already available; on re-runs it
     # otherwise re-downloads unconditionally even though pip already has it.
     if ! "$VENV_DIR/bin/python3" -c "import en_core_web_sm" 2>/dev/null; then
-        "$VENV_DIR/bin/python3" -m spacy download en_core_web_sm -q 2>/dev/null \
-            || log_warn "spacy model download failed (TTS may not work)"
+        if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" "$VENV_DIR/bin/python3" -m spacy download en_core_web_sm -q 2>/dev/null; then
+            true
+        elif [[ "$?" -eq 124 ]]; then
+            log_warn "spacy model download timed out (TTS may not work)"
+        else
+            log_warn "spacy model download failed (TTS may not work)"
+        fi
     fi
 
-    if HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
+    if run_with_timeout "$MODEL_PREP_TIMEOUT_SECONDS" env HF_HUB_CACHE="$MODEL_DIR" HF_HUB_DISABLE_TELEMETRY=1 "$VENV_DIR/bin/python3" -c "
 from kokoro_mlx import KokoroTTS
 KokoroTTS.from_pretrained('mlx-community/Kokoro-82M-bf16')
 " 2>/dev/null; then
         log_ok "Kokoro TTS model"
+    elif [[ "$?" -eq 124 ]]; then
+        log_warn "Kokoro model check timed out (will retry on first use)"
     else
         log_warn "Kokoro download failed (will retry on first use)"
     fi

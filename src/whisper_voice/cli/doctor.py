@@ -2,6 +2,7 @@
 # Copyright (c) 2025-2026 Soroush Yousefpour
 """Doctor and update commands."""
 
+import json
 import os
 import shutil
 import socket
@@ -28,6 +29,7 @@ from .constants import (
 from .lifecycle import _get_config_path, _is_running
 
 FORMULA_NAME = "gabrimatic/local-whisper/local-whisper"
+MODEL_PREP_TIMEOUT_SECONDS = 180
 
 
 def _doctor_pass(msg: str):
@@ -731,9 +733,24 @@ def _update_models(required: bool = False) -> bool:
 
     if active_engine in engine_fetch:
         label, cmd = engine_fetch[active_engine]
-        result = subprocess.run([python, "-c", cmd], env=model_env)
-        if result.returncode != 0:
+        timed_out = False
+        try:
+            result = subprocess.run(
+                [python, "-c", cmd],
+                env=model_env,
+                timeout=MODEL_PREP_TIMEOUT_SECONDS,
+            )
+            failed = result.returncode != 0
+        except subprocess.TimeoutExpired:
+            failed = True
+            timed_out = True
+            print(
+                f"{C_YELLOW}  {label} model check timed out after "
+                f"{MODEL_PREP_TIMEOUT_SECONDS}s - skipping{C_RESET}"
+            )
+        if failed and not timed_out:
             print(f"{C_YELLOW}  {label} model check failed - skipping{C_RESET}")
+        if failed:
             if required:
                 return False
     else:
@@ -746,17 +763,29 @@ def _update_models(required: bool = False) -> bool:
         tts_enabled = False
 
     if tts_enabled:
-        result = subprocess.run(
-            [
-                python, "-c",
-                "from kokoro_mlx import KokoroTTS; "
-                "KokoroTTS.from_pretrained('mlx-community/Kokoro-82M-bf16'); "
-                "print('Kokoro TTS up to date.')",
-            ],
-            env=model_env,
-        )
-        if result.returncode != 0:
+        timed_out = False
+        try:
+            result = subprocess.run(
+                [
+                    python, "-c",
+                    "from kokoro_mlx import KokoroTTS; "
+                    "KokoroTTS.from_pretrained('mlx-community/Kokoro-82M-bf16'); "
+                    "print('Kokoro TTS up to date.')",
+                ],
+                env=model_env,
+                timeout=MODEL_PREP_TIMEOUT_SECONDS,
+            )
+            failed = result.returncode != 0
+        except subprocess.TimeoutExpired:
+            failed = True
+            timed_out = True
+            print(
+                f"{C_YELLOW}  Kokoro TTS model check timed out after "
+                f"{MODEL_PREP_TIMEOUT_SECONDS}s - skipping{C_RESET}"
+            )
+        if failed and not timed_out:
             print(f"{C_YELLOW}  Kokoro TTS model check failed - skipping{C_RESET}")
+        if failed:
             if required:
                 return False
     else:
@@ -765,7 +794,7 @@ def _update_models(required: bool = False) -> bool:
 
 
 def _wait_for_service_ready(timeout: float = 180.0) -> bool:
-    """Wait until the restarted service reports that the active model is ready."""
+    """Wait until the restarted service reports that it can accept commands."""
     deadline = time.monotonic() + timeout
     last_error = None
     while time.monotonic() < deadline:
@@ -784,9 +813,11 @@ def _wait_for_service_ready(timeout: float = 180.0) -> bool:
                     if not chunk:
                         break
                     buf += chunk
-                if b"\n" in buf and b'"ready": true' in buf:
-                    print(f"  {C_GREEN}Service ready{C_RESET}")
-                    return True
+                if b"\n" in buf:
+                    payload = json.loads(buf.split(b"\n", 1)[0].decode("utf-8"))
+                    if payload.get("ready") is True:
+                        print(f"  {C_GREEN}Service ready{C_RESET}")
+                        return True
         except Exception as exc:
             last_error = exc
         time.sleep(0.5)

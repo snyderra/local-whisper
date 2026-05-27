@@ -248,8 +248,10 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
         """Mark models as recently used. Reloads if needed, resets idle timer."""
         self._last_model_use = time.time()
         if not self._models_loaded:
-            self._reload_models()
+            if not self._reload_models():
+                return False
         self._schedule_idle_unload()
+        return True
 
     def _schedule_idle_unload(self):
         """(Re)schedule the idle unload timer."""
@@ -287,10 +289,11 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
         if not self.transcriber.ensure_loaded():
             log("Failed to reload transcription engine", "ERR")
             self._send_state_error("Failed to reload engine")
-            return
+            return False
         self._models_loaded = True
         self._send_state_update()
         log("Models reloaded", "OK")
+        return True
 
     # ------------------------------------------------------------------
     # Swift UI subprocess

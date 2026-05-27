@@ -553,6 +553,8 @@ Loading a model does **not** start the server.
 
 `setup.sh` downloads and warms the active transcription engine. Fresh installs use Parakeet by default. Qwen3-ASR downloads when you switch to it, WhisperKit manages its own models, and Kokoro downloads only after text-to-speech is enabled. After a model is cached, later runs load it from disk.
 
+If idle model unload is enabled, Local Whisper can release the model from RAM while the service stays ready. The next transcription reloads the model on demand. Setup, update, and restart checks wait for the service command socket, not for the model to remain resident in memory.
+
 </details>
 
 <details>

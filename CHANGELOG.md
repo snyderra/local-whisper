@@ -4,6 +4,14 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.10] - 2026-05-27
+
+### Fixed
+
+- Kept idle-unloaded models from making the service report unhealthy, so setup, update, restart, and status readiness checks no longer wait on a resident model.
+- Bounded model preparation checks during setup/update so a stuck local model check fails or skips instead of hanging indefinitely.
+- Return a clear reload error if an on-demand model reload fails before transcription starts.
+
 ## [1.6.9] - 2026-05-26
 
 ### Fixed

@@ -2,9 +2,12 @@
 # Copyright (c) 2025-2026 Soroush Yousefpour
 """CLI setup behavior."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from whisper_voice.cli import lifecycle
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_homebrew_start_uses_brew_services_without_existing_plist(monkeypatch, capsys):
@@ -23,3 +26,10 @@ def test_homebrew_start_uses_brew_services_without_existing_plist(monkeypatch, c
 
     assert calls == [(["brew", "services", "start", "local-whisper"], True)]
     assert "via brew services" in capsys.readouterr().out
+
+
+def test_source_setup_model_preparation_is_bounded():
+    setup = (ROOT / "setup.sh").read_text(encoding="utf-8")
+
+    assert "MODEL_PREP_TIMEOUT_SECONDS=180" in setup
+    assert "run_with_timeout \"$MODEL_PREP_TIMEOUT_SECONDS\"" in setup

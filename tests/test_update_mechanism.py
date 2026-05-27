@@ -4,6 +4,8 @@
 
 from types import SimpleNamespace
 
+import subprocess
+
 from whisper_voice.cli import doctor
 
 
@@ -96,3 +98,22 @@ def test_update_fails_before_restart_when_active_model_cannot_prepare(monkeypatc
 
     assert not doctor.cmd_update()
     assert ["/opt/homebrew/bin/brew", "services", "restart", doctor.FORMULA_NAME] not in calls
+
+
+def test_active_model_prepare_has_timeout(monkeypatch, tmp_path):
+    def fake_run(cmd, **kwargs):
+        assert kwargs.get("timeout") == doctor.MODEL_PREP_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(doctor, "_get_venv_python", lambda: "/tmp/python")
+    monkeypatch.setattr(doctor, "MODEL_DIR", tmp_path)
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        "whisper_voice.config.load_config",
+        lambda: SimpleNamespace(
+            transcription=SimpleNamespace(engine="parakeet_v3"),
+            tts=SimpleNamespace(enabled=False),
+        ),
+    )
+
+    assert not doctor._update_models(required=True)

@@ -41,7 +41,9 @@ class PipelineMixin:
 
     def _process(self, audio, *, paste_at_cursor: bool = False):
         """Process recorded audio: transcribe, fix grammar, deliver text."""
-        self._touch_model_activity()
+        if self._touch_model_activity() is False:
+            self._show_error("Model reload failed", "Failed to reload transcription engine")
+            return
         self._current_status = "Processing..."
         self._send_state_update()
         marker_written = False
@@ -454,6 +456,9 @@ class PipelineMixin:
                 self._current_status = "Retrying..."
                 self._send_state_update()
                 log("Retrying...")
+                if self._touch_model_activity() is False:
+                    self._show_error("Model reload failed", "Failed to reload transcription engine")
+                    return
 
                 raw_text, err = self._transcribe_and_validate(path)
                 if err:
