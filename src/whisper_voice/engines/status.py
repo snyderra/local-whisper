@@ -8,9 +8,9 @@ UI can tell users what's on disk vs what will download on next switch, and
 offers cache removal so users can reclaim gigabytes without leaving the app.
 """
 
+import math
 import os
 import shutil
-import math
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 

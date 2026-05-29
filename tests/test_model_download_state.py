@@ -2,8 +2,8 @@
 # Copyright (c) 2025-2026 Soroush Yousefpour
 """Regression tests for model cache truth and inline download progress."""
 
-from pathlib import Path
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
