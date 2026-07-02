@@ -80,7 +80,7 @@ wh restart
 
 ## Source setup
 
-Use source setup when you want to develop Local Whisper or test unreleased changes:
+Use source setup when you want to develop Local Whisper, test unreleased changes, or install on a Mac without Homebrew — this path never requires it:
 
 ```bash
 git clone https://github.com/gabrimatic/local-whisper.git
@@ -88,7 +88,9 @@ cd local-whisper
 ./setup.sh
 ```
 
-The source setup path installs an editable Python package in `.venv`, builds the Swift menu bar app, configures a LaunchAgent, and adds the `wh` alias to your shell profile.
+The source setup path installs an editable Python package in `.venv`, builds the Swift menu bar app, configures a LaunchAgent, and adds the `wh` alias to your shell profile. When no compatible Python 3.11/3.12 is on the system, it provisions one with [uv](https://docs.astral.sh/uv/); when `ffmpeg` is missing, it links a bundled static build to `~/.whisper/bin/ffmpeg` so transcription works out of the box.
+
+Text-to-speech is the one optional feature with a manual dependency: enabling TTS uses `espeak-ng`, which has no Python wheel. Install it with any package manager (for example `brew install espeak-ng` or a build from [espeak-ng releases](https://github.com/espeak-ng/espeak-ng)) if you turn TTS on.
 
 ## Updates
 

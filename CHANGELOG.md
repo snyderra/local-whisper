@@ -4,6 +4,14 @@ This changelog tracks notable Local Whisper changes.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- Made the source install path (`git clone` + `./setup.sh`) fully Homebrew-free: setup no longer installs Homebrew, provisions Python 3.12 via `uv` when no compatible interpreter exists, and links a bundled static ffmpeg (from the new `imageio-ffmpeg` dependency) to `~/.whisper/bin/ffmpeg` on the service PATH. The Homebrew tap channel is unchanged.
+- Made espeak-ng an optional, manually installed dependency checked only when text-to-speech is enabled; setup and `wh doctor` no longer install it via Homebrew or fail core checks without it.
+- Updated `wh doctor --fix` to repair a missing ffmpeg with the vendored binary on source and pip installs, and updated CLI hints so non-Homebrew installs are never told to run `brew` commands as the only option.
+
 ## [1.6.14] - 2026-06-16
 
 ### Fixed

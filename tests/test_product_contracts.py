@@ -90,6 +90,22 @@ def test_recommended_install_path_uses_homebrew_and_guided_setup():
     assert "begin" + "ner" not in combined.lower()
 
 
+def test_source_setup_path_is_homebrew_free():
+    """setup.sh must install, run, and update without ever invoking brew."""
+    setup = _read("setup.sh")
+    pyproject = _read("pyproject.toml")
+
+    # brew may appear in log hints, but never as an executed install command.
+    for line in setup.splitlines():
+        if "brew install" in line:
+            assert line.strip().startswith("log_"), line
+    assert "raw.githubusercontent.com/Homebrew/install" not in setup
+    # Vendored ffmpeg must be on the *service's* PATH, not just the shell's.
+    assert "$HOME/.whisper/bin:" in setup
+    assert "ensure_vendored_ffmpeg" in setup
+    assert "imageio-ffmpeg" in pyproject
+
+
 def test_service_controls_are_clear_near_setup_docs():
     """Non-technical users should see service control commands before deep CLI details."""
     readme = _read("README.md")

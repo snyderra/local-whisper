@@ -72,7 +72,7 @@ wh setup
 
 The Homebrew path installs Local Whisper, downloads and warms the default Parakeet model, checks macOS permissions, starts the background service, and keeps updates simple.
 
-Source setup for development:
+Source setup, for development or for Macs without Homebrew:
 
 ```bash
 git clone https://github.com/gabrimatic/local-whisper.git
@@ -80,7 +80,7 @@ cd local-whisper
 ./setup.sh
 ```
 
-The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. Other engines download inline in Settings when you switch to them, with progress, cache verification, and cancel. Kokoro downloads when text-to-speech is enabled.
+The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. It never requires Homebrew: when no compatible Python 3.11/3.12 is found it provisions one with [uv](https://docs.astral.sh/uv/), and a bundled static ffmpeg is linked to `~/.whisper/bin/ffmpeg` when the system has none. Other engines download inline in Settings when you switch to them, with progress, cache verification, and cancel. Kokoro downloads when text-to-speech is enabled.
 
 ### Service Controls
 
@@ -199,7 +199,7 @@ Whisper on Apple Neural Engine via [Argmax](https://github.com/argmaxinc/Whisper
 
 Kokoro-82M via [kokoro-mlx](https://github.com/gabrimatic/kokoro-mlx). Runs in-process after install. No local server. Streaming playback starts before full synthesis completes.
 
-Toggle from the menu bar or Settings -> Voice. Turning it on downloads the Kokoro voice model (~170 MB) and uses the spaCy `en_core_web_sm` dictionary plus system `espeak-ng`. Run `./setup.sh` while the toggle is on to pre-fetch the assets before the first speak.
+Toggle from the menu bar or Settings -> Voice. Turning it on downloads the Kokoro voice model (~170 MB) and uses the spaCy `en_core_web_sm` dictionary plus system `espeak-ng` (install it yourself with any package manager; setup does not install it). Run `./setup.sh` while the toggle is on to pre-fetch the model assets before the first speak.
 
 Use it from the keyboard or CLI:
 

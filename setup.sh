@@ -76,7 +76,7 @@ write_plist() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>$HOME/.whisper/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>HF_HUB_CACHE</key>
         <string>$HOME/.whisper/models</string>
         <key>HF_HUB_DISABLE_TELEMETRY</key>
@@ -159,20 +159,6 @@ if [[ "$MACOS_MAJOR" -lt 26 ]]; then
 fi
 
 # ============================================================================
-# Homebrew
-# ============================================================================
-
-log_step "Checking Homebrew..."
-
-if ! command -v brew &> /dev/null; then
-    log_info "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || \
-        fail "Homebrew install failed. Visit https://brew.sh"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-log_ok "Homebrew ready"
-
-# ============================================================================
 # Python
 # ============================================================================
 
@@ -194,9 +180,17 @@ for candidate in python3.12 python3.11 python3; do
 done
 
 if [[ -z "$PYTHON_BIN" ]]; then
-    log_info "No compatible Python found. Installing python@3.12 via Homebrew..."
-    brew install python@3.12 || fail "Failed to install Python 3.12"
-    PYTHON_BIN="$(brew --prefix python@3.12)/bin/python3.12"
+    log_info "No compatible Python found. Installing Python 3.12 via uv..."
+    if ! command -v uv &> /dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh || \
+            fail "Failed to install uv. See https://docs.astral.sh/uv/getting-started/installation/"
+        # The standalone installer places uv in ~/.local/bin, which may not be
+        # on PATH yet in this shell.
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    command -v uv &> /dev/null || fail "uv installed but not on PATH. Open a new terminal and run this script again."
+    uv python install 3.12 || fail "Failed to install Python 3.12"
+    PYTHON_BIN=$(uv python find 3.12) || fail "Could not locate the uv-installed Python 3.12"
     PYTHON_VERSION=$("$PYTHON_BIN" --version 2>&1 | cut -d' ' -f2)
 fi
 log_ok "Python $PYTHON_VERSION ($PYTHON_BIN)"
@@ -367,7 +361,7 @@ model.warm_up()
         ;;
 
     whisperkit)
-        log_info "WhisperKit engine selected. Install 'whisperkit-cli' with Homebrew; models download on first run."
+        log_info "WhisperKit engine selected. Install the CLI with 'wh doctor --fix' (or 'brew install whisperkit-cli'); models download on first run."
         ;;
 
     *)
@@ -384,16 +378,25 @@ print('true' if load_config().tts.enabled else 'false')
 " 2>/dev/null || echo "false")
 
 # ffmpeg is a hard requirement for Parakeet-TDT (the default engine): its
-# audio loader shells out to `ffmpeg` for every transcribe call. Install
-# unconditionally so a fresh machine can transcribe immediately.
-if ! command -v ffmpeg &>/dev/null; then
-    brew install ffmpeg -q 2>/dev/null || log_warn "ffmpeg install failed (transcription will not work)"
+# audio loader shells out to `ffmpeg` for every transcribe call. Prefer a
+# system ffmpeg; otherwise link the static imageio-ffmpeg binary to
+# ~/.whisper/bin/ffmpeg, which the service plist puts on PATH. No Homebrew.
+if command -v ffmpeg &>/dev/null; then
+    log_ok "ffmpeg (system)"
+elif "$VENV_DIR/bin/python3" -c "
+from whisper_voice._ffmpeg import ensure_vendored_ffmpeg
+ensure_vendored_ffmpeg()
+" 2>/dev/null; then
+    log_ok "ffmpeg (vendored at ~/.whisper/bin/ffmpeg)"
+else
+    log_warn "ffmpeg setup failed (transcription will not work). Fix later with: wh doctor --fix"
 fi
 
-# espeak-ng is tiny and useful beyond TTS; install regardless so enabling TTS
-# later does not require another Homebrew run.
-if ! brew list espeak-ng &>/dev/null 2>&1; then
-    brew install espeak-ng -q 2>/dev/null || log_warn "espeak-ng install failed (TTS may not work)"
+# espeak-ng is only needed by Kokoro TTS phonemization and has no pip wheel.
+# Never install it here; just warn when TTS is on and it is missing.
+if [ "$TTS_ENABLED" = "true" ] && ! command -v espeak-ng &>/dev/null; then
+    log_warn "espeak-ng not found (needed for TTS). Install it manually, e.g. from"
+    log_info "https://github.com/espeak-ng/espeak-ng or your package manager, then run: wh restart"
 fi
 
 if [ "$TTS_ENABLED" = "true" ]; then

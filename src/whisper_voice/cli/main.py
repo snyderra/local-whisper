@@ -120,7 +120,10 @@ def cmd_install():
 
     if not setup_script.exists():
         print(f"{C_RED}This install does not include setup.sh.{C_RESET}")
-        print(f"{C_DIM}Install with Homebrew for the guided setup path:{C_RESET}")
+        print(f"{C_DIM}Use either guided setup path — from source (no Homebrew needed):{C_RESET}")
+        print(f"{C_BOLD}  git clone https://github.com/gabrimatic/local-whisper.git{C_RESET}")
+        print(f"{C_BOLD}  cd local-whisper && ./setup.sh{C_RESET}")
+        print(f"{C_DIM}or with Homebrew:{C_RESET}")
         print(f"{C_BOLD}  brew install gabrimatic/local-whisper/local-whisper{C_RESET}")
         print(f"{C_BOLD}  wh setup{C_RESET}")
         sys.exit(1)

@@ -82,7 +82,9 @@ def ensure_whisperkit_cli_installed() -> str:
     if not brew:
         raise RuntimeError(
             "WhisperKit CLI is required, but Homebrew is not available. "
-            "Install Homebrew, then run: brew install whisperkit-cli"
+            "Download a prebuilt whisperkit-cli from "
+            "https://github.com/argmaxinc/WhisperKit/releases and put it on "
+            "your PATH, or install Homebrew and run: brew install whisperkit-cli"
         )
 
     try:

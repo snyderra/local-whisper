@@ -250,8 +250,8 @@ prompt_engineer = "ctrl+shift+p"
 [tts]
 # Text-to-Speech: select text in any app and press the shortcut to hear it read aloud.
 # Activating this downloads the Kokoro voice model (~170 MB) on first use and requires
-# espeak-ng (system) plus en_core_web_sm (spaCy). Run ./setup.sh while enabled to
-# pre-fetch everything.
+# espeak-ng (install manually, e.g. via a package manager) plus en_core_web_sm (spaCy).
+# Run ./setup.sh while enabled to pre-fetch the models.
 enabled = false
 
 provider = "kokoro"

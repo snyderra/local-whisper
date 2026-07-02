@@ -104,6 +104,74 @@ def _homebrew_wh_binary(brew: str) -> str:
     return shutil.which("wh") or "wh"
 
 
+def _check_ffmpeg(fix: bool, install_method: str) -> bool:
+    """Doctor check: ffmpeg on PATH or vendored at ~/.whisper/bin. Returns ok.
+
+    Non-brew installs repair with the vendored imageio-ffmpeg binary; brew
+    installs keep `brew install ffmpeg` so the fix lands on the brew service's
+    PATH (/opt/homebrew/bin), which does not include ~/.whisper/bin.
+    """
+    from whisper_voice._ffmpeg import ensure_vendored_ffmpeg, find_ffmpeg
+
+    if find_ffmpeg():
+        _doctor_pass("ffmpeg")
+        return True
+
+    if install_method == INSTALL_BREW:
+        hint = "Run: brew install ffmpeg" if not fix else ""
+        _doctor_fail("ffmpeg not installed", hint)
+        if fix:
+            _doctor_fixing("brew install ffmpeg")
+            result = subprocess.run(["brew", "install", "ffmpeg"], capture_output=True)
+            if result.returncode == 0:
+                _doctor_pass("ffmpeg installed")
+                return True
+            _doctor_fail("brew install ffmpeg failed")
+        return False
+
+    hint = "Run: wh doctor --fix" if not fix else ""
+    _doctor_fail("ffmpeg not installed", hint)
+    if fix:
+        _doctor_fixing("Linking vendored ffmpeg to ~/.whisper/bin/ffmpeg")
+        try:
+            ensure_vendored_ffmpeg()
+            _doctor_pass("ffmpeg installed")
+            return True
+        except Exception:
+            _doctor_fail("Vendored ffmpeg setup failed")
+    return False
+
+
+def _check_espeak(install_method: str, tts_enabled: bool) -> None:
+    """Doctor check: espeak-ng presence. Warning-only; never fails core.
+
+    espeak-ng is only used by misaki for Kokoro TTS phonemization and has no
+    pip wheel, so a missing binary gets a manual-install hint instead of a
+    failed core check.
+    """
+    if not tts_enabled:
+        _doctor_info("espeak-ng (TTS disabled, not required)")
+        return
+
+    espeak_found = shutil.which("espeak-ng") is not None
+    if not espeak_found and install_method == INSTALL_BREW:
+        # Check via brew even if not on PATH
+        try:
+            result = subprocess.run(["brew", "list", "espeak-ng"], capture_output=True)
+            espeak_found = result.returncode == 0
+        except Exception:
+            pass
+    if espeak_found:
+        _doctor_pass("espeak-ng")
+    elif install_method == INSTALL_BREW:
+        _doctor_warn("espeak-ng not installed (needed for TTS)", "Run: brew install espeak-ng")
+    else:
+        _doctor_warn(
+            "espeak-ng not installed (needed for TTS)",
+            "Install it manually: https://github.com/espeak-ng/espeak-ng (or any package manager)",
+        )
+
+
 def cmd_doctor(args: list):
     """Check system health and optionally fix issues.
 
@@ -195,55 +263,18 @@ def cmd_doctor(args: list):
             core_ok = False
 
     # 4. ffmpeg (required by parakeet-mlx for audio decoding)
-    ffmpeg_found = shutil.which("ffmpeg") is not None
-    if ffmpeg_found:
-        _doctor_pass("ffmpeg")
-    else:
-        hint = "Run: brew install ffmpeg" if not fix else ""
-        _doctor_fail("ffmpeg not installed", hint)
-        if fix:
-            _doctor_fixing("brew install ffmpeg")
-            result = subprocess.run(["brew", "install", "ffmpeg"], capture_output=True)
-            if result.returncode == 0:
-                _doctor_pass("ffmpeg installed")
-            else:
-                _doctor_fail("brew install ffmpeg failed")
-                core_ok = False
-        else:
-            core_ok = False
+    if not _check_ffmpeg(fix, install_method):
+        core_ok = False
 
-    # 5. espeak-ng
-    espeak_found = shutil.which("espeak-ng") is not None
-    if not espeak_found:
-        # Check via brew even if not on PATH
-        try:
-            result = subprocess.run(["brew", "list", "espeak-ng"], capture_output=True)
-            espeak_found = result.returncode == 0
-        except Exception:
-            pass
-    if espeak_found:
-        _doctor_pass("espeak-ng")
-    else:
-        hint = "Run: brew install espeak-ng" if not fix else ""
-        _doctor_fail("espeak-ng not installed", hint)
-        if fix:
-            _doctor_fixing("brew install espeak-ng")
-            result = subprocess.run(["brew", "install", "espeak-ng"], capture_output=True)
-            if result.returncode == 0:
-                _doctor_pass("espeak-ng installed")
-            else:
-                _doctor_fail("brew install espeak-ng failed")
-                core_ok = False
-        else:
-            core_ok = False
-
-    # 6. spaCy model (only required when TTS is enabled)
+    # 5. espeak-ng (only needed when TTS is enabled)
     try:
         from whisper_voice.config import load_config
         tts_enabled = load_config().tts.enabled
     except Exception:
         tts_enabled = False
+    _check_espeak(install_method, tts_enabled)
 
+    # 6. spaCy model (only required when TTS is enabled)
     if tts_enabled:
         spacy_ok = False
         try:
@@ -299,7 +330,7 @@ def cmd_doctor(args: list):
                 hint = "Run: wh doctor --fix" if not fix else ""
                 _doctor_fail("WhisperKit CLI not installed for active engine", hint)
                 if fix:
-                    _doctor_fixing("brew install whisperkit-cli")
+                    _doctor_fixing("Installing WhisperKit CLI...")
                     try:
                         ensure_whisperkit_cli_installed()
                         _doctor_pass("WhisperKit CLI installed")

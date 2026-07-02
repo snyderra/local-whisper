@@ -37,6 +37,8 @@ dependencies = [
     "qwen3-asr-mlx>=0.1.1",
     "kokoro-mlx>=0.1.2",
     "soundfile>=0.14.0",
+    # Static arm64 ffmpeg for brew-free installs; linked to ~/.whisper/bin/ffmpeg.
+    "imageio-ffmpeg>=0.5.1",
     "misaki[en]>=0.9.4",
     # Kokoro/misaki pull pydantic through spaCy. Pydantic declares the
     # exact pydantic-core ABI wheel it can import safely.
