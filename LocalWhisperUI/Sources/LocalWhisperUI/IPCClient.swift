@@ -13,6 +13,7 @@ final class IPCClient: @unchecked Sendable {
     private var connection: NWConnection?
     private var reconnectDelay: Double = 0.5
     private let maxReconnectDelay: Double = 10.0
+    private var reconnectPending = false
     private var buffer = Data()
     private var isRunning = false
     private weak var appState: AppState?
@@ -87,7 +88,15 @@ final class IPCClient: @unchecked Sendable {
                 if self.isRunning {
                     self.scheduleReconnect()
                 }
-            case .preparing, .setup, .waiting:
+            case .waiting:
+                // A unix socket with no listener yet (service still booting)
+                // parks NWConnection in .waiting forever — no network-change
+                // event will ever retry it. Treat it as a failure and poll.
+                self.publishConnectionState(.connecting)
+                if self.isRunning {
+                    self.scheduleReconnect()
+                }
+            case .preparing, .setup:
                 self.publishConnectionState(.connecting)
             default:
                 break
@@ -139,12 +148,20 @@ final class IPCClient: @unchecked Sendable {
     }
 
     private func scheduleReconnect() {
+        // Cancelling below re-enters the state handler as .cancelled, which
+        // also calls scheduleReconnect — without this guard every retry
+        // would fork additional reconnect timers.
+        guard !reconnectPending else { return }
+        reconnectPending = true
         let delay = reconnectDelay
         reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
+        connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.isRunning else { return }
+            guard let self else { return }
+            self.reconnectPending = false
+            guard self.isRunning else { return }
             self.connect()
         }
     }

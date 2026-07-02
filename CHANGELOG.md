@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Fixed Apple Intelligence grammar correction answering request-shaped dictation (questions, "write an email…" phrasing) instead of correcting it: the dictated text was sent as the bare session prompt, and the on-device model followed it over its instructions. All Apple Intelligence modes now frame the text as delimited data with an inline task restatement.
+- Fixed the menu bar app hanging on "Connecting…" forever in app-bundle installs: connecting to the service's unix socket before the service had created it parked the connection in a waiting state that never retries. The IPC client now treats that state as a retryable failure, with a guard against stacking reconnect timers.
 
 ### Added
 
