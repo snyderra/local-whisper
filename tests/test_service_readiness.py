@@ -22,6 +22,8 @@ class _StatusApp(CommandsMixin):
 
 
 def test_status_reports_service_ready_when_idle_model_is_unloaded():
+    from whisper_voice import __version__
+
     app = _StatusApp(ready=True, model_running=False, models_loaded=False)
     messages = []
 
@@ -35,6 +37,7 @@ def test_status_reports_service_ready_when_idle_model_is_unloaded():
         "busy": False,
         "recording": False,
         "engine": "parakeet_v3",
+        "version": __version__,
     }]
 
 

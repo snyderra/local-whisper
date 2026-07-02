@@ -216,7 +216,7 @@ struct AdvancedPanel: View {
             }
             InlineNotice(
                 kind: .info,
-                text: "To update Local Whisper, run `wh update` in Terminal. It only works when installed from a git clone."
+                text: "To update Local Whisper, use \"Check for updates…\" in the menu bar. Homebrew and git-clone installs can also run `wh update` in Terminal."
             )
         } header: {
             SettingsSectionHeader(

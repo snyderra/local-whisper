@@ -78,6 +78,20 @@ Restart after changing permissions:
 wh restart
 ```
 
+## Standalone app (direct download)
+
+Local Whisper also builds as a self-contained `Local Whisper.app` that embeds its own Python runtime, all dependencies, and ffmpeg — no Homebrew, git, or system Python involved. Drag it to Applications and launch it: the app installs its background service on first run, owns the Microphone and Accessibility permissions under one stable identity, and updates itself from the menu bar ("Check for updates…").
+
+Signed, notarized `.dmg` downloads will appear on [GitHub Releases](https://github.com/gabrimatic/local-whisper/releases) as this channel rolls out. Until a notarized build is published, Gatekeeper blocks unsigned development builds — those are only for maintainers, built locally with:
+
+```bash
+./scripts/build_bundle.sh
+./scripts/sign_bundle.sh "build/Local Whisper.app"
+./scripts/make_dmg.sh "build/Local Whisper.app"
+```
+
+To remove an app install: quit Local Whisper, run `wh uninstall` from `Local Whisper.app/Contents/Resources/bin/wh`, then move the app to the Trash.
+
 ## Source setup
 
 Use source setup when you want to develop Local Whisper, test unreleased changes, or install on a Mac without Homebrew — this path never requires it:

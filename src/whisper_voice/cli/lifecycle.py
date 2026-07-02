@@ -20,6 +20,7 @@ from .constants import (
     C_RED,
     C_RESET,
     C_YELLOW,
+    INSTALL_APP,
     INSTALL_BREW,
     LAUNCHAGENT_LABEL,
     LAUNCHAGENT_PLIST,
@@ -53,7 +54,8 @@ def _find_pid() -> Optional[int]:
 
 
 def _is_service_command(command: str) -> bool:
-    return "local-whisper" in command and (" wh _run" in command or "/wh _run" in command)
+    from .._service_identity import is_service_command
+    return is_service_command(command)
 
 
 def _find_pids() -> list[int]:
@@ -407,6 +409,17 @@ def cmd_start():
             # Fallback: try launchctl start
             subprocess.run(["launchctl", "start", LAUNCHAGENT_LABEL], capture_output=True)
             print(f"{C_GREEN}Started{C_RESET} (via LaunchAgent)")
+    elif get_install_method() == INSTALL_APP:
+        # App install with no agent yet: write + bootstrap it (also kickstarts)
+        from .. import _launchagent
+        from .constants import get_app_bundle_root
+        bundle_root = get_app_bundle_root()
+        if bundle_root is not None:
+            _launchagent.install(bundle_root)
+            print(f"{C_GREEN}Started{C_RESET} (LaunchAgent installed)")
+        else:
+            print(f"{C_RED}Could not locate the app bundle{C_RESET}", file=sys.stderr)
+            sys.exit(1)
     else:
         # No LaunchAgent installed - spawn directly
         wh_path = str(Path(sys.argv[0]).resolve())
@@ -436,6 +449,13 @@ def cmd_stop():
     # If Homebrew, also tell brew services to stop (prevents auto-restart)
     if get_install_method() == INSTALL_BREW:
         subprocess.run(["brew", "services", "stop", "local-whisper"], capture_output=True)
+    # App install: bootout first — the agent supervises the UI, and killing
+    # the UI by signal would otherwise count as unsuccessful exit and restart.
+    elif get_install_method() == INSTALL_APP:
+        subprocess.run(
+            ["launchctl", "bootout", f"gui/{os.getuid()}/{LAUNCHAGENT_LABEL}"],
+            capture_output=True,
+        )
 
     if pid is None:
         print(f"{C_YELLOW}Running but PID not found - check Activity Monitor{C_RESET}", file=sys.stderr)

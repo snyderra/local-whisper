@@ -21,6 +21,7 @@ from .constants import (
     C_RED,
     C_RESET,
     C_YELLOW,
+    INSTALL_APP,
     INSTALL_BREW,
     LAUNCHAGENT_PLIST,
     LOG_FILE,
@@ -111,6 +112,9 @@ def cmd_log():
 
 def cmd_install():
     """Run the full setup script (deps, venv, models, service, permissions)."""
+    if get_install_method() == INSTALL_APP:
+        _run_app_setup()
+        return
     if get_install_method() == INSTALL_BREW:
         _run_homebrew_setup()
         return
@@ -129,6 +133,47 @@ def cmd_install():
         sys.exit(1)
 
     os.execvp("bash", ["bash", str(setup_script)])
+
+
+def _run_app_setup():
+    """Guided first-time setup for app-bundle installs.
+
+    Permission requests deliberately stay in the app/service so macOS TCC
+    attributes them to the signed bundle, not this terminal.
+    """
+    from whisper_voice import _launchagent
+
+    from .constants import get_app_bundle_root
+
+    print()
+    print(f"  {C_BOLD}╭────────────────────────────────────────╮{C_RESET}")
+    print(f"  {C_BOLD}│{C_RESET}  {C_CYAN}Local Whisper{C_RESET} · First-time setup     {C_BOLD}│{C_RESET}")
+    print(f"  {C_BOLD}╰────────────────────────────────────────╯{C_RESET}")
+    print()
+
+    print(f"  {C_BOLD}1/3  Preparing config{C_RESET}")
+    _ensure_config()
+
+    print()
+    print(f"  {C_BOLD}2/3  Getting the local speech model ready{C_RESET}")
+    _update_models()
+
+    print()
+    print(f"  {C_BOLD}3/3  Installing and starting the background service{C_RESET}")
+    bundle_root = get_app_bundle_root()
+    if bundle_root is None:
+        print(f"  {C_RED}✗{C_RESET}  Could not locate the app bundle")
+        sys.exit(1)
+    _launchagent.install(bundle_root)
+    print(f"  {C_GREEN}✓{C_RESET}  Service installed and started")
+
+    print()
+    print(f"  {C_GREEN}{C_BOLD}Setup complete.{C_RESET}")
+    print(f"  {C_DIM}Grant Microphone and Accessibility when the app asks — the")
+    print(f"  onboarding window opens from the menu bar icon on first launch.{C_RESET}")
+    print()
+    print(f"  Try it: {C_BOLD}double-tap Right Option, speak, tap again to stop.{C_RESET}")
+    print()
 
 
 def _run_homebrew_setup():
@@ -267,6 +312,15 @@ def cmd_uninstall():
     print(f"  {C_BOLD}Uninstalling Local Whisper...{C_RESET}")
     print()
 
+    is_app = get_install_method() == INSTALL_APP
+    if is_app:
+        # Bootout first: launchd supervises the UI, which supervises the
+        # service — killing children before removing the job would race
+        # the restart logic.
+        from whisper_voice import _launchagent
+        _launchagent.uninstall()
+        print(f"  {C_GREEN}✓{C_RESET}  LaunchAgent removed")
+
     # Stop running service. Wait briefly for graceful exit before escalating.
     running, pid = _is_running()
     if running and pid:
@@ -326,6 +380,9 @@ def cmd_uninstall():
 
     print()
     print(f"  {C_BOLD}Done.{C_RESET} Local Whisper fully removed.")
+    if is_app:
+        # The CLI must not delete the bundle it is running from.
+        print(f"  {C_DIM}Finish by moving Local Whisper.app to the Trash.{C_RESET}")
     # Surface the source-install venv path explicitly so users know what to clean up.
     project_root = Path(__file__).resolve().parents[3]
     venv_dir = project_root / ".venv"
@@ -333,6 +390,33 @@ def cmd_uninstall():
         print(f"  {C_DIM}Source-install venv preserved at {venv_dir}.{C_RESET}")
         print(f"  {C_DIM}To remove it: rm -rf {venv_dir}{C_RESET}")
     print(f"  {C_DIM}Open a new shell for alias removal to take effect.{C_RESET}")
+
+
+def _cmd_agent(args: list):
+    """Hidden: manage the app-bundle LaunchAgent (install|uninstall|status)."""
+    from whisper_voice import _launchagent
+
+    from .constants import get_app_bundle_root
+
+    sub = args[0] if args else "status"
+    if sub == "install":
+        bundle_root = get_app_bundle_root()
+        if bundle_root is None:
+            print(f"{C_RED}Not an app-bundle install.{C_RESET}", file=sys.stderr)
+            sys.exit(1)
+        _launchagent.install(bundle_root)
+        print(f"{C_GREEN}LaunchAgent installed{C_RESET} ({bundle_root})")
+    elif sub == "uninstall":
+        _launchagent.uninstall()
+        print(f"{C_GREEN}LaunchAgent removed{C_RESET}")
+    elif sub == "status":
+        agent = _launchagent.status()
+        print(f"plist_exists={agent.plist_exists} loaded={agent.loaded} current={agent.program_is_current_bundle}")
+        print(f"program={agent.program}")
+        sys.exit(0 if (agent.plist_exists and agent.program_is_current_bundle) else 1)
+    else:
+        print(f"{C_RED}Unknown _agent subcommand: {sub}{C_RESET}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_default():
@@ -420,6 +504,16 @@ def cli_main():
     elif cmd == "_prepare_models":
         if not _update_models(required=True):
             sys.exit(1)
+    elif cmd == "_agent":
+        _cmd_agent(rest)
+    elif cmd == "_service_version":
+        # Hidden: running service's version (empty when unreachable). Used
+        # by the app bundle to detect a stale service after an update.
+        from .client import _cmd_send_recv
+        try:
+            print(_cmd_send_recv({"action": "status"}).get("version", ""))
+        except Exception:
+            print("")
     elif cmd in ("-h", "--help", "help"):
         _print_help()
     else:

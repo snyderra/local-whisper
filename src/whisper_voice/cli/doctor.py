@@ -21,9 +21,11 @@ from .constants import (
     C_RESET,
     C_YELLOW,
     CMD_SOCKET_PATH,
+    INSTALL_APP,
     INSTALL_BREW,
     INSTALL_SOURCE,
     MODEL_DIR,
+    get_app_bundle_root,
     get_install_method,
 )
 from .lifecycle import _get_config_path, _is_running
@@ -223,6 +225,8 @@ def cmd_doctor(args: list):
             core_ok = False
     elif install_method == INSTALL_BREW:
         _doctor_pass("Homebrew installation")
+    elif install_method == INSTALL_APP:
+        _doctor_pass(f"App bundle installation ({get_app_bundle_root()})")
 
     # 3. Core Python packages
     missing_pkgs = []
@@ -430,7 +434,11 @@ def cmd_doctor(args: list):
     from .build import _homebrew_ui_binary
     from .constants import LAUNCHAGENT_PLIST
     ui_app = Path.home() / ".whisper" / "LocalWhisperUI.app"
-    ui_found = ui_app.is_dir() or (install_method == INSTALL_BREW and _homebrew_ui_binary().exists())
+    if install_method == INSTALL_APP:
+        bundle_root = get_app_bundle_root()
+        ui_found = bool(bundle_root) and (bundle_root / "Contents" / "MacOS" / "LocalWhisperUI").is_file()
+    else:
+        ui_found = ui_app.is_dir() or (install_method == INSTALL_BREW and _homebrew_ui_binary().exists())
     if ui_found:
         _doctor_pass("LocalWhisperUI.app")
     else:
@@ -478,6 +486,19 @@ def cmd_doctor(args: list):
                 except OSError as e:
                     _doctor_fail(f"Could not remove Homebrew LaunchAgent: {e}")
                     core_ok = False
+    if install_method == INSTALL_APP and LAUNCHAGENT_PLIST.exists():
+        # A moved/renamed bundle leaves the plist pointing at the old path.
+        from whisper_voice import _launchagent
+        agent = _launchagent.status()
+        if not agent.program_is_current_bundle:
+            hint = "Run: wh doctor --fix" if not fix else ""
+            _doctor_warn("LaunchAgent points at a different bundle", hint or (agent.program or ""))
+            if fix:
+                _doctor_fixing("Reinstalling LaunchAgent for this bundle...")
+                bundle_root = get_app_bundle_root()
+                if bundle_root is not None:
+                    _launchagent.install(bundle_root)
+                    _doctor_pass("LaunchAgent reinstalled")
     if install_method != INSTALL_BREW and LAUNCHAGENT_PLIST.exists():
         result = subprocess.run(
             ["launchctl", "list", "com.local-whisper"],
@@ -504,6 +525,21 @@ def cmd_doctor(args: list):
                         stderr or "Check the plist and permissions manually",
                     )
                     core_ok = False
+    elif install_method == INSTALL_APP:
+        hint = "Run: wh setup (or launch Local Whisper.app)" if not fix else ""
+        _doctor_fail("LaunchAgent not installed", hint)
+        if fix:
+            _doctor_fixing("Installing LaunchAgent...")
+            from whisper_voice import _launchagent
+            bundle_root = get_app_bundle_root()
+            if bundle_root is not None:
+                _launchagent.install(bundle_root)
+                _doctor_pass("LaunchAgent installed")
+            else:
+                _doctor_fail("Could not locate the app bundle")
+                core_ok = False
+        else:
+            core_ok = False
     elif install_method != INSTALL_BREW:
         _doctor_fail("LaunchAgent not installed", "Run ./setup.sh to install")
         core_ok = False
@@ -639,6 +675,15 @@ def cmd_update(
             print(f"{C_RED}  {text}{C_RESET}", file=sys.stderr)
         report("error", text)
         return False
+
+    if install_method == INSTALL_APP:
+        # App-bundle updates are owned by the app (in-app updater / new dmg),
+        # not by git or brew.
+        print(f"\n  {C_BOLD}Updates are managed by the app.{C_RESET}")
+        print(f"  {C_DIM}Use the menu bar → Check for updates…, or download the latest{C_RESET}")
+        print(f"  {C_DIM}release: https://github.com/gabrimatic/local-whisper/releases/latest{C_RESET}")
+        report("done", "Updates are managed by the app")
+        return True
 
     if install_method == INSTALL_BREW:
         print(f"\n  {C_BOLD}1/4  Refreshing Homebrew...{C_RESET}")

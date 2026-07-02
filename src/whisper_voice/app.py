@@ -304,6 +304,12 @@ class App(IPCMixin, RecordingMixin, PipelineMixin, CommandsMixin, SwitchingMixin
 
     def _spawn_swift_ui(self):
         """Launch the Swift UI binary as a subprocess."""
+        from ._install import INSTALL_APP, get_install_method
+        if os.environ.get("LOCAL_WHISPER_UI_PARENT") or get_install_method() == INSTALL_APP:
+            # App-bundle installs invert the topology: the UI is the parent
+            # (launchd job + TCC identity) and already spawned this service.
+            log("UI managed by parent app")
+            return
         swift_binary = (
             Path.home() / ".whisper" / "LocalWhisperUI.app" / "Contents" / "MacOS" / "LocalWhisperUI"
         )
@@ -566,7 +572,8 @@ def _service_process_pids() -> list[int]:
         command = parts[2]
         if pid == current_pid or process_uid != uid:
             continue
-        if "local-whisper" in command and (" wh _run" in command or "/wh _run" in command):
+        from ._service_identity import is_service_command
+        if is_service_command(command):
             pids.append(pid)
     return pids
 
@@ -607,6 +614,35 @@ def _terminate_duplicate_services():
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _ensure_runtime_env():
+    """Defense-in-depth environment for app-bundle installs.
+
+    The Swift parent sets these explicitly; this covers direct launches of
+    the bundled service (debugging, `Resources/bin/wh _run`).
+    """
+    from ._install import INSTALL_APP, get_app_bundle_root, get_install_method
+
+    if get_install_method() != INSTALL_APP:
+        return
+    bundle_root = get_app_bundle_root()
+    if bundle_root is None:
+        return
+    os.environ.setdefault("HF_HUB_CACHE", str(Path.home() / ".whisper" / "models"))
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    path_entries = os.environ.get("PATH", "").split(":")
+    for entry in (str(Path.home() / ".whisper" / "bin"), str(bundle_root / "Contents" / "Resources" / "bin")):
+        if entry not in path_entries:
+            path_entries.insert(0, entry)
+    os.environ["PATH"] = ":".join(path_entries)
+    # Re-link ~/.whisper/bin/ffmpeg into the current bundle: after an update
+    # replaces the .app, a stale symlink would point at the old bundle.
+    try:
+        from ._ffmpeg import ensure_vendored_ffmpeg
+        ensure_vendored_ffmpeg()
+    except Exception:
+        pass
+
+
 def service_main():
     """Entry point for the service (launched via LaunchAgent or wh start)."""
     _setup_service_logging()
@@ -623,6 +659,8 @@ def service_main():
     # engines or enabled TTS mid-session. Clear it in-process so those installs
     # get the fix on next restart without needing to re-run setup.sh.
     os.environ.pop("HF_HUB_OFFLINE", None)
+
+    _ensure_runtime_env()
 
     # Single-instance lock shared by source, pip, and Homebrew installs.
     lock_file = _acquire_service_lock()

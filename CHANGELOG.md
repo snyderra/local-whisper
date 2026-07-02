@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added a standalone `Local Whisper.app` distribution channel: `scripts/build_bundle.sh` assembles a relocatable app embedding Python 3.12, all dependencies, and a static ffmpeg; `scripts/sign_bundle.sh`, `scripts/notarize_app.sh` (credential-gated), and `scripts/make_dmg.sh` produce a signed, notarizable dmg; a new `release-app.yml` workflow builds it on each published release.
+- Added the `INSTALL_APP` install method: the app installs and heals its own LaunchAgent (`wh _agent`), the menu-bar app supervises the bundled Python service as its child so macOS permission grants attach to the app's stable signed identity, and `wh setup`/`doctor`/`update`/`build`/`uninstall` gained app-aware behavior.
+- Added Sparkle 2 in-app updates for the standalone app (menu bar "Check for updates…"), an appcast published via GitHub Pages, and a version handshake that restarts the service after manual drag-upgrades.
+
 ### Changed
 
 - Made the source install path (`git clone` + `./setup.sh`) fully Homebrew-free: setup no longer installs Homebrew, provisions Python 3.12 via `uv` when no compatible interpreter exists, and links a bundled static ffmpeg (from the new `imageio-ffmpeg` dependency) to `~/.whisper/bin/ffmpeg` on the service PATH. The Homebrew tap channel is unchanged.

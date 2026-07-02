@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened-runtime entitlements shared by the app, the embedded
+         python3.12 (the actual mic-recording process), and ffmpeg.
+         Identical for ad-hoc and Developer ID builds so local testing
+         exercises what ships.
+
+         allow-unsigned-executable-memory: cffi/libffi W+X closures
+         (sounddevice, pyobjc). Scheduled narrowing test on the first
+         notarized build. allow-jit is deliberately absent (CPython 3.12
+         has no JIT; MLX compiles Metal shaders out of process).
+         get-task-allow must never appear (notarization rejects it). -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>

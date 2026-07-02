@@ -1,0 +1,7 @@
+#!/bin/sh
+# Bundle launcher: run the embedded Python against the wh entry script.
+# -s -E isolate the runtime from user site-packages and PYTHON* env vars;
+# -B never writes .pyc files (writes inside Resources would invalidate the
+# bundle's code signature).
+HERE=$(cd "$(dirname "$0")" && pwd)
+exec "$HERE/../python/bin/python3.12" -s -E -B "$HERE/wh.py" "$@"

@@ -1,0 +1,159 @@
+name: Release app
+
+# Builds, signs, notarizes, and uploads the standalone "Local Whisper.app"
+# dmg when a GitHub release is published (created by scripts/release.sh).
+# Credential-gated: without signing secrets it still runs end-to-end and
+# uploads an ad-hoc dmg (suffix -adhoc) for smoke testing — never referenced
+# by the appcast. workflow_dispatch allows re-runs after notary flakes.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (vX.Y.Z) to build"
+        required: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build-sign-notarize:
+    name: Build, sign, notarize dmg
+    runs-on: macos-15
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Select Xcode 26
+        # Releases must not silently skip the UI build (unlike ci.yml).
+        run: |
+          XCODE_APP=$(ls -d /Applications/Xcode_26* 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_APP" ]; then
+            echo "Xcode 26 required for the release build" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+
+      - name: Guard tag matches pyproject version
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "pyproject version v$VERSION does not match tag $TAG" >&2
+            exit 1
+          fi
+
+      - name: Resolve signing mode
+        # Secrets cannot be used in `if:` directly; export env from a step.
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          if [ -n "$MACOS_CERT_P12" ]; then
+            KEYCHAIN=$RUNNER_TEMP/release.keychain-db
+            security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+              -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: \
+              -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security list-keychains -d user -s "$KEYCHAIN" login.keychain
+            IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
+              | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+            echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+            echo "AD_HOC=0" >> "$GITHUB_ENV"
+          else
+            echo "No signing certificate configured; producing an ad-hoc dmg."
+            echo "SIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "AD_HOC=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build bundle
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ env.AD_HOC == '0' && secrets.SPARKLE_ED_PUBLIC_KEY || '' }}
+        run: ./scripts/build_bundle.sh
+
+      - name: Sign bundle
+        run: ./scripts/sign_bundle.sh "build/Local Whisper.app"
+
+      - name: Notarize app
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          if [ -n "$NOTARY_KEY_P8" ]; then
+            echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+            export NOTARY_KEY_P8_PATH="$RUNNER_TEMP/AuthKey.p8"
+          fi
+          ./scripts/notarize_app.sh "build/Local Whisper.app"
+
+      - name: Build dmg
+        id: dmg
+        run: |
+          DMG=$(./scripts/make_dmg.sh "build/Local Whisper.app" | tail -1)
+          SIZE=$(stat -f%z "$DMG")
+          if [ "$SIZE" -gt 1900000000 ]; then
+            echo "dmg exceeds the GitHub release asset limit margin ($SIZE bytes)" >&2
+            exit 1
+          fi
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize dmg
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          if [ -n "$NOTARY_KEY_P8" ]; then
+            export NOTARY_KEY_P8_PATH="$RUNNER_TEMP/AuthKey.p8"
+          fi
+          ./scripts/notarize_app.sh "${{ steps.dmg.outputs.path }}"
+
+      - name: Upload dmg to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "${{ steps.dmg.outputs.path }}" --clobber
+
+      - name: Sign update and publish appcast
+        if: env.AD_HOC == '0'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ]; then
+            echo "No Sparkle key configured; skipping appcast update."
+            exit 0
+          fi
+          # Pinned Sparkle tools for sign_update
+          SPARKLE_VERSION=2.8.0
+          curl -LsSf -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle" && tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          DMG="${{ steps.dmg.outputs.path }}"
+          SIG=$("$RUNNER_TEMP/sparkle/bin/sign_update" -s "$SPARKLE_ED_PRIVATE_KEY" "$DMG" \
+            | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          VERSION="${TAG#v}"
+          python3 scripts/make_appcast.py \
+            --version "$VERSION" \
+            --dmg-url "https://github.com/${{ github.repository }}/releases/download/$TAG/$(basename "$DMG")" \
+            --length "${{ steps.dmg.outputs.size }}" \
+            --ed-signature "$SIG" \
+            --notes-url "https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main && git checkout main
+          git add appcast/appcast.xml
+          git commit -m "chore: appcast entry for $TAG"
+          git push origin main
+          # GITHUB_TOKEN pushes do not trigger workflows; deploy Pages explicitly.
+          gh workflow run docs-pages.yml --ref main

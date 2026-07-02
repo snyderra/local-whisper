@@ -139,7 +139,11 @@ struct MenuBarView: View {
         .keyboardShortcut(",", modifiers: .command)
 
         Button("Check for updates…") {
-            appState.ipcClient?.sendAction("update")
+            if UpdaterController.shared.isAvailable {
+                UpdaterController.shared.checkForUpdates()
+            } else {
+                appState.ipcClient?.sendAction("update")
+            }
         }
         .keyboardShortcut("u", modifiers: [.command, .shift])
 

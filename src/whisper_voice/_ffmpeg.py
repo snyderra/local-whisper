@@ -23,10 +23,16 @@ def vendored_ffmpeg_path() -> Path:
 
 
 def find_ffmpeg() -> str | None:
-    """Return a runnable ffmpeg: system PATH first, then the vendored copy."""
+    """Return a runnable ffmpeg: PATH, then the app bundle, then ~/.whisper/bin."""
     found = shutil.which("ffmpeg")
     if found:
         return found
+    from ._install import get_app_bundle_root
+    bundle_root = get_app_bundle_root()
+    if bundle_root is not None:
+        bundled = bundle_root / "Contents" / "Resources" / "bin" / "ffmpeg"
+        if bundled.exists() and os.access(bundled, os.X_OK):
+            return str(bundled)
     vendored = vendored_ffmpeg_path()
     if vendored.exists() and os.access(vendored, os.X_OK):
         return str(vendored)

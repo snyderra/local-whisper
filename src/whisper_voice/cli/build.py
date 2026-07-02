@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from .constants import C_DIM, C_GREEN, C_RED, C_RESET, C_YELLOW, INSTALL_BREW, get_install_method
+from .constants import C_DIM, C_GREEN, C_RED, C_RESET, C_YELLOW, INSTALL_APP, INSTALL_BREW, get_install_method
 from .lifecycle import _is_running, cmd_start, cmd_stop
 
 
@@ -121,6 +121,9 @@ def _homebrew_ui_binary() -> Path:
 
 def cmd_build():
     """Build the LocalWhisperUI Swift package."""
+    if get_install_method() == INSTALL_APP:
+        print(f"{C_GREEN}LocalWhisperUI is bundled inside Local Whisper.app{C_RESET} — nothing to build")
+        return
     if get_install_method() == INSTALL_BREW:
         # Homebrew builds the Swift UI during formula install
         cellar_bin = _homebrew_ui_binary()
@@ -143,9 +146,8 @@ def cmd_build():
 
 def cmd_restart(rebuild: bool = False):
     """Stop then start, optionally rebuilding LocalWhisperUI first."""
-    is_brew = get_install_method() == INSTALL_BREW
-
-    if not is_brew:
+    # Brew and app installs ship a prebuilt UI; only source installs rebuild.
+    if get_install_method() not in (INSTALL_BREW, INSTALL_APP):
         needs_ui_rebuild = rebuild or _local_whisper_ui_sources_newer_than_binary()
 
         swift = None

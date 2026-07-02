@@ -6,7 +6,14 @@ import os
 import tempfile
 from pathlib import Path
 
-from .._install import INSTALL_BREW, INSTALL_PIP, INSTALL_SOURCE, get_install_method
+from .._install import (
+    INSTALL_APP,
+    INSTALL_BREW,
+    INSTALL_PIP,
+    INSTALL_SOURCE,
+    get_app_bundle_root,
+    get_install_method,
+)
 
 # Color constants
 C_RESET = "\033[0m"
@@ -29,5 +36,6 @@ __all__ = [
     "C_RESET", "C_BOLD", "C_DIM", "C_RED", "C_GREEN", "C_YELLOW", "C_CYAN",
     "LOCK_FILE", "LAUNCHAGENT_LABEL", "LAUNCHAGENT_PLIST", "LOG_FILE",
     "MODEL_DIR", "CMD_SOCKET_PATH",
-    "INSTALL_SOURCE", "INSTALL_BREW", "INSTALL_PIP", "get_install_method",
+    "INSTALL_SOURCE", "INSTALL_BREW", "INSTALL_PIP", "INSTALL_APP",
+    "get_install_method", "get_app_bundle_root",
 ]

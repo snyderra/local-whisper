@@ -80,7 +80,9 @@ cd local-whisper
 ./setup.sh
 ```
 
-The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. It never requires Homebrew: when no compatible Python 3.11/3.12 is found it provisions one with [uv](https://docs.astral.sh/uv/), and a bundled static ffmpeg is linked to `~/.whisper/bin/ffmpeg` when the system has none. Other engines download inline in Settings when you switch to them, with progress, cache verification, and cancel. Kokoro downloads when text-to-speech is enabled.
+The source setup script installs dependencies, downloads and warms the active transcription model (Parakeet by default), builds the Swift UI, configures auto-start, and creates the `wh` alias. It never requires Homebrew: when no compatible Python 3.11/3.12 is found it provisions one with [uv](https://docs.astral.sh/uv/), and a bundled static ffmpeg is linked to `~/.whisper/bin/ffmpeg` when the system has none.
+
+A standalone drag-to-Applications `Local Whisper.app` (embedded runtime, in-app updates) is rolling out as a third channel — see [Standalone app](https://gabrimatic.github.io/local-whisper/reference/installation/) in the installation docs. Other engines download inline in Settings when you switch to them, with progress, cache verification, and cancel. Kokoro downloads when text-to-speech is enabled.
 
 ### Service Controls
 

@@ -160,6 +160,8 @@ pathlib.Path(out).write_text(m.group(1).strip() + "\n")
 PY
 gh release create "$TAG" --title "$TAG" --notes-file "$notes_file"
 rm -f "$notes_file"
+echo "==> Publishing the release triggers the 'Release app' workflow (signed dmg + appcast)."
+echo "    Watch it with: gh run watch --workflow=release-app.yml"
 
 # 8. Homebrew formula bump
 echo "==> Bumping homebrew formula in $TAP_DIR"

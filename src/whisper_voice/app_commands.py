@@ -42,6 +42,10 @@ class CommandsMixin:
     def _cmd_status(self, send: callable):
         """Return a lightweight readiness snapshot for update/restart verification."""
         model_running = bool(self.transcriber.running())
+        try:
+            from whisper_voice import __version__
+        except Exception:
+            __version__ = ""
         send({
             "type": "done",
             "success": True,
@@ -50,6 +54,8 @@ class CommandsMixin:
             "busy": bool(self._busy),
             "recording": bool(self.recorder.recording),
             "engine": self.config.transcription.engine,
+            # Consumed by the app bundle's stale-service reconciler.
+            "version": __version__,
         })
 
     def _cmd_whisper(self, request: dict, send: callable, stop_event: threading.Event):
