@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Apple Intelligence grammar correction answering request-shaped dictation (questions, "write an email…" phrasing) instead of correcting it: the dictated text was sent as the bare session prompt, and the on-device model followed it over its instructions. All Apple Intelligence modes now frame the text as delimited data with an inline task restatement.
+
 ### Added
 
 - Added a standalone `Local Whisper.app` distribution channel: `scripts/build_bundle.sh` assembles a relocatable app embedding Python 3.12, all dependencies, and a static ffmpeg; `scripts/sign_bundle.sh`, `scripts/notarize_app.sh` (credential-gated), and `scripts/make_dmg.sh` produce a signed, notarizable dmg; a new `release-app.yml` workflow builds it on each published release.

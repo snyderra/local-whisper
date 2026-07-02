@@ -15,7 +15,7 @@ from typing import Optional, Tuple
 from ...config import get_config
 from ...utils import log
 from ..base import ERROR_TRUNCATE_LENGTH, GrammarBackend
-from ..modes import get_mode
+from ..modes import get_mode, get_mode_apple_intelligence_prompt
 
 try:
     import apple_fm_sdk as fm
@@ -133,7 +133,10 @@ class AppleIntelligenceBackend(GrammarBackend):
         log(f"Apple Intelligence fix_with_mode: {mode.name} ({len(text)} chars)", "INFO")
 
         timeout = config.apple_intelligence.timeout if config.apple_intelligence.timeout > 0 else None
-        full_prompt = mode.user_prompt_template.replace("{text}", text)
+        # Framed prompt: the bare dictated text used to be sent as the whole
+        # prompt, and the on-device model answered request-shaped dictation
+        # instead of correcting it.
+        full_prompt = get_mode_apple_intelligence_prompt(mode_id, text)
 
         try:
             result = self._run_async(

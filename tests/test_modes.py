@@ -35,7 +35,7 @@ def _import_modes():
             ModeNotFoundError,
             get_all_modes,
             get_mode,
-            get_mode_apple_intelligence_input,
+            get_mode_apple_intelligence_prompt,
             get_mode_lm_studio_messages,
             get_mode_ollama_prompt,
         )
@@ -45,7 +45,7 @@ def _import_modes():
         get_all_modes,
         get_mode_ollama_prompt,
         get_mode_lm_studio_messages,
-        get_mode_apple_intelligence_input,
+        get_mode_apple_intelligence_prompt,
         ModeNotFoundError,
         Mode,
     )
@@ -187,28 +187,38 @@ class TestGetModeLmStudioMessages:
 
 
 # ---------------------------------------------------------------------------
-# TestGetModeAppleIntelligenceInput
+# TestGetModeAppleIntelligencePrompt
 # ---------------------------------------------------------------------------
 
-class TestGetModeAppleIntelligenceInput:
-    def test_contains_separator(self):
-        _, _, _, _, _, get_mode_apple_intelligence_input, *_ = _import_modes()
-        result = get_mode_apple_intelligence_input("proofread", "hello")
-        assert "\n---SEPARATOR---\n" in result
+class TestGetModeAppleIntelligencePrompt:
+    def test_frames_text_as_delimited_data(self):
+        _, _, _, _, _, get_mode_apple_intelligence_prompt, *_ = _import_modes()
+        result = get_mode_apple_intelligence_prompt("transcription", "how do i unsubscribe")
+        assert "<input>\nhow do i unsubscribe\n</input>" in result
+        # The anti-answering framing is the point of this builder: the
+        # on-device model answers request-shaped dictation without it.
+        assert "not a request" in result
+        assert "Never answer questions" in result
 
-    def test_contains_text_and_system_prompt(self):
-        registry, _, _, _, _, get_mode_apple_intelligence_input, *_ = _import_modes()
-        mode = registry["proofread"]
-        result = get_mode_apple_intelligence_input("proofread", "hello world")
-        assert "hello world" in result
-        assert mode.system_prompt in result
+    def test_every_mode_has_an_inline_task(self):
+        registry, _, _, _, _, get_mode_apple_intelligence_prompt, *_ = _import_modes()
+        for mode_id in registry:
+            result = get_mode_apple_intelligence_prompt(mode_id, "hello world")
+            assert "<input>" in result
+            # A task line beyond the generic framing must be present.
+            assert len(result.splitlines()) >= 4
+
+    def test_braces_in_text_survive(self):
+        _, _, _, _, _, get_mode_apple_intelligence_prompt, *_ = _import_modes()
+        result = get_mode_apple_intelligence_prompt("proofread", "set {key} to {value}")
+        assert "set {key} to {value}" in result
 
     def test_unknown_mode_raises(self):
-        _, _, _, _, _, get_mode_apple_intelligence_input, ModeNotFoundError, _ = _import_modes()
+        _, _, _, _, _, get_mode_apple_intelligence_prompt, ModeNotFoundError, _ = _import_modes()
         with pytest.raises(ModeNotFoundError):
-            get_mode_apple_intelligence_input("nonexistent", "hello")
+            get_mode_apple_intelligence_prompt("nonexistent", "hello")
 
     def test_empty_text_raises(self):
-        _, _, _, _, _, get_mode_apple_intelligence_input, *_ = _import_modes()
+        _, _, _, _, _, get_mode_apple_intelligence_prompt, *_ = _import_modes()
         with pytest.raises(ValueError):
-            get_mode_apple_intelligence_input("proofread", "")
+            get_mode_apple_intelligence_prompt("proofread", "")
